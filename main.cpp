@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <vector>
 #include <chrono>
+#include <limits>
+#include <algorithm>
 
 namespace
 {
@@ -42,20 +44,60 @@ namespace
     static vertex_matrix adjacency_matrix = {};
     static clique optimal_clique = {};
 
-    vertex_array get_candidates(vertex v)
+    vertex_array find_candidates(vertex v)
     {
         vertex n_vertices = static_cast<vertex>(adjacency_matrix.size());
         const auto& row = adjacency_matrix[v];
         vertex_array C = {};
         for (vertex i = v + 1; i < n_vertices; ++i)
         {
-            if (row[i] > 0 /*&& i > v*/ && v != i) { C.push_back(i); }
+            if (row[i] > 0) { C.push_back(i); }
         }
         return C;
     }
 
-    void max_clique(const clique& curr_Q, const vertex_array& C)
+    std::uint64_t upper_bound(const clique& Q, const vertex_array& C)
     {
+        return std::numeric_limits<std::uint64_t>::max();
+    }
+
+    vertex_array intersection(const vertex_array& c1, const vertex_array& c2)
+    {
+        vertex_array out = {};
+        auto s1 = c1.size(), s2 = c2.size();
+        const auto& c_min = s1 < s2 ? c1 : c2;
+        const auto& c_max = s1 < s2 ? c2 : c1;
+        for (const auto& vertex : c_min)
+        {
+            if (std::find_if(c_max.cbegin(), c_max.cend(), [&vertex] (const auto& v) { return vertex == v; }) != c_max.cend())
+            {
+                out.push_back(vertex);
+            }
+        }
+        return out;
+    }
+
+    void max_clique(const clique& Q, const vertex_array& C)
+    {
+        auto ub = upper_bound(Q, C);
+        if (ub <= optimal_clique.m_heuristic_size) return;
+        if (ub <= optimal_clique.size()) return;
+        if (C.size() == 0)
+        {
+            optimal_clique = Q;
+            return;
+        }
+
+        for (const auto& candidate : C)
+        {
+            auto temp_q = Q;
+            temp_q.m_vertices.push_back(candidate);
+            vertex_array c_single(1, candidate);
+            // TODO: how to do intersection?
+//            auto new_c = intersection(c_single, C);
+            auto neighbours = find_candidates(candidate);
+            max_clique(temp_q, neighbours);
+        }
     }
 }
 
@@ -94,6 +136,17 @@ int main(int argc, char* argv[])
     auto end = _chrono::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
     std::cout << "Parsing took " << elapsed.count() << " seconds" << std::endl;
+
+    start = _chrono::now();
+    for (vertex v = 0; v < n_vertices; ++v)
+    {
+        clique q;
+        q.m_vertices.push_back(v);
+        max_clique(q, find_candidates(v));
+    }
+    end = _chrono::now();
+    elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
+    std::cout << elapsed.count() << " q " << optimal_clique.size() << std::endl;
 
     return 0;
 }
