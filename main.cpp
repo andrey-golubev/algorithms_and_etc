@@ -85,7 +85,7 @@ namespace
 
     inline std::uint64_t upper_bound(const clique& Q, const vertex_array& C)
     {
-        return std::numeric_limits<std::uint64_t>::max();
+        return Q.m_vertices.size() + C.size();
     }
 
     void max_clique(const clique& Q, const vertex_array& C)
@@ -123,20 +123,31 @@ namespace
         }
         return s;
     }
+
+#define ERROR_OUT(msg) std::cerr << msg << std::endl;
 }
 
 int main(int argc, char* argv[]) try
 {
     if (argc < 2) return 1;
     time_limit = std::atof(argv[2]); // in seconds
-    if (time_limit == 0) return 1;
+    if (time_limit == 0)
+    {
+        ERROR_OUT("Time limit is wrong")
+        return 1;
+    }
     std::ifstream f(argv[1]);
-    if (!f.good()) return 1;
+    if (!f.good())
+    {
+        ERROR_OUT("File is unreachable/not found/etc.")
+        return 1;
+    }
 
     std::string line;
     vertex n_vertices = 0;
 //    std::size_t n_edges = 0;
     static constexpr char default_delim[] = " ";
+    std::map<vertex, std::size_t> vertex_degrees_map;
     while (!f.eof())
     {
         std::getline(f, line);
@@ -155,16 +166,29 @@ int main(int argc, char* argv[]) try
                  v2 = static_cast<vertex>(std::atoll(parsed[2].c_str())) - 1;
             adjacency_matrix[v1][v2]++;
             adjacency_matrix[v2][v1]++;
+            vertex_degrees_map[v1]++;
+            vertex_degrees_map[v2]++;
         }
     }
 
+    std::vector<std::pair<vertex, std::size_t>> vertex_degrees;
+    for (const auto& element : vertex_degrees_map)
+    {
+        vertex_degrees.emplace_back(element);
+    }
+
+    std::sort(vertex_degrees.begin(), vertex_degrees.end(), [] (auto& pair1, auto& pair2)
+    {
+        return pair1.second > pair2.second;
+    });
+
     start_time = _chrono::now();
     std::cout << time_limit << std::endl;
-    for (vertex v = 0; v < n_vertices; ++v)
+    for (const auto& element : vertex_degrees)
     {
         clique q;
-        q.m_vertices.push_back(v);
-        max_clique(q, get_connected(v));
+        q.m_vertices.push_back(element.first);
+        max_clique(q, get_connected(element.first));
     }
     auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
     std::cout << elapsed.count() << " " << optimal_clique.m_vertices.size() << " " << pretty_print(optimal_clique) << std::endl;
