@@ -62,7 +62,7 @@ namespace
     vertex_array find_candidates(const vertex_array& vertices)
     {
         auto size = vertices.size();
-        std::map<vertex, int> merged_candidates;
+        std::map<vertex, std::size_t> merged_candidates;
         for (const auto& vertex : vertices)
         {
             auto candidates = get_connected(vertex);
@@ -135,7 +135,7 @@ int main(int argc, char* argv[]) try
 
     std::string line;
     vertex n_vertices = 0;
-    std::size_t n_edges = 0;
+//    std::size_t n_edges = 0;
     static constexpr char default_delim[] = " ";
     while (!f.eof())
     {
@@ -146,7 +146,7 @@ int main(int argc, char* argv[]) try
         if (l0.compare("p") == 0) // format: p col <n_vertices> <n_edges>
         {
             n_vertices = std::atoll(parsed[2].c_str());
-            n_edges = std::atoll(parsed[3].c_str());
+//            n_edges = std::atoll(parsed[3].c_str());
             adjacency_matrix.resize(n_vertices, vertex_array(n_vertices, 0));
         }
         if (l0.compare("e") == 0) // format: e <vertex1> <vertex2>
@@ -159,6 +159,7 @@ int main(int argc, char* argv[]) try
     }
 
     start_time = _chrono::now();
+    std::cout << time_limit << std::endl;
     for (vertex v = 0; v < n_vertices; ++v)
     {
         clique q;
@@ -172,7 +173,7 @@ int main(int argc, char* argv[]) try
 }
 catch (const std::exception&)
 {
-//    std::cout << time_limit << " " << optimal_clique.m_vertices.size() << " " << pretty_print(optimal_clique) << std::endl;
-    std::cout << time_limit << " 0 " << pretty_print(optimal_clique) << std::endl;
+    std::cout << time_limit << " " << optimal_clique.m_vertices.size() << " " << pretty_print(optimal_clique) << std::endl;
+//    std::cout << time_limit << " 0 " << pretty_print(optimal_clique) << std::endl;
     return 1;
 }
