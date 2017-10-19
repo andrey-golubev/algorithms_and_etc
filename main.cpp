@@ -8,8 +8,6 @@
 #include <limits>
 #include <algorithm>
 #include <map>
-#include <atomic>
-#include <thread>
 
 namespace
 {
@@ -27,11 +25,9 @@ namespace
     static vertex_matrix adjacency_matrix = {};
     static clique optimal_clique = {};
 
-    static std::size_t m_heuristic_size = 0;
+//    static std::size_t m_heuristic_size = 0;
 
     static double time_limit = 0;
-
-    volatile std::atomic<bool> should_exit(false);
 
     static auto start_time = _chrono::now();
 
@@ -96,7 +92,7 @@ namespace
     {
         auto ub = upper_bound(Q, C);
         if (ub <= optimal_clique.m_vertices.size()) return;
-        if (ub <= m_heuristic_size) return;
+//        if (ub <= m_heuristic_size) return;
         if (C.size() == 0)
         {
             optimal_clique = Q;
