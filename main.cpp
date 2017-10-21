@@ -133,7 +133,7 @@ int main(int argc, char* argv[]) try
     time_limit = std::atof(argv[2]); // in seconds
     if (time_limit == 0)
     {
-        ERROR_OUT("Time limit is wrong")
+        ERROR_OUT("Time limit is incorrect")
         return 1;
     }
     std::ifstream f(argv[1]);
@@ -183,7 +183,6 @@ int main(int argc, char* argv[]) try
     });
 
     start_time = _chrono::now();
-    std::cout << time_limit << std::endl;
     for (const auto& element : vertex_degrees)
     {
         clique q;

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
-project(algorithms_etc)
+project(mlp)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_EXTENSIONS OFF)
