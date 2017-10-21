@@ -76,17 +76,17 @@ namespace
         return out;
     }
 
-    inline std::uint64_t upper_bound(const clique& Q, const vertex_array& C)
+    inline std::uint64_t upper_bound(const clique& Q)
     {
-        return Q.m_vertices.size() + C.size();
+        return Q.m_vertices.size() + Q.m_candidates.size();
     }
 
-    void max_clique(const clique& Q, const vertex_array& C)
+    void max_clique(const clique& Q)
     {
-        auto ub = upper_bound(Q, C);
+        auto ub = upper_bound(Q);
         if (ub <= optimal_clique.m_vertices.size()) return;
 //        if (ub <= m_heuristic_size) return;
-        if (C.size() == 0)
+        if (Q.m_candidates.size() == 0)
         {
             optimal_clique = Q;
             return;
@@ -98,12 +98,12 @@ namespace
             throw std::runtime_error("Out of time");
         }
 
-        for (const auto& candidate : C)
+        for (const auto& candidate : Q.m_candidates)
         {
             auto temp_q = Q;
             temp_q.m_candidates = find_candidates(temp_q, candidate);
             temp_q.m_vertices.push_back(candidate);
-            max_clique(temp_q, temp_q.m_candidates);
+            max_clique(temp_q);
         }
     }
 
@@ -186,7 +186,7 @@ int main(int argc, char* argv[]) try
         clique q;
         q.m_candidates = get_connected(element.first);
         q.m_vertices.push_back(element.first);
-        max_clique(q, q.m_candidates);
+        max_clique(q);
     }
     auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
     std::cout << elapsed.count() << " " << optimal_clique.m_vertices.size() << " " << pretty_print(optimal_clique) << std::endl;
