@@ -12,13 +12,14 @@
 namespace
 {
     using vertex = std::uint64_t;
-    using vertex_array = std::vector<std::uint64_t>;
+    using vertex_array = std::vector<vertex>;
     using vertex_matrix = std::vector<vertex_array>;
     using _chrono = std::chrono::steady_clock;
 
     struct clique
     {
         vertex_array m_vertices = {};
+        vertex_array m_candidates = {};
     };
 
 
@@ -59,27 +60,19 @@ namespace
         return C;
     }
 
-    vertex_array find_candidates(const vertex_array& vertices)
+    vertex_array find_candidates(const clique& clq, vertex vertex_to_be_added)
     {
-        auto size = vertices.size();
-        std::map<vertex, std::size_t> merged_candidates;
-        for (const auto& vertex : vertices)
+        vertex_array out = {};
+        auto connected = get_connected(vertex_to_be_added);
+        for (const auto& known_candidate : clq.m_candidates)
         {
-            auto candidates = get_connected(vertex);
-            for (const auto& candidate : candidates)
+            for (const auto& possible_candidate : connected)
             {
-                merged_candidates[candidate]++;
+                if (possible_candidate == known_candidate)
+                    out.push_back(possible_candidate);
             }
         }
 
-        vertex_array out = {};
-        for (const auto& pair : merged_candidates)
-        {
-            if (pair.second >= size)
-            {
-                out.push_back(pair.first);
-            }
-        }
         return out;
     }
 
@@ -108,8 +101,9 @@ namespace
         for (const auto& candidate : C)
         {
             auto temp_q = Q;
+            temp_q.m_candidates = find_candidates(temp_q, candidate);
             temp_q.m_vertices.push_back(candidate);
-            max_clique(temp_q, find_candidates(temp_q.m_vertices));
+            max_clique(temp_q, temp_q.m_candidates);
         }
     }
 
@@ -186,8 +180,9 @@ int main(int argc, char* argv[]) try
     for (const auto& element : vertex_degrees)
     {
         clique q;
+        q.m_candidates = get_connected(element.first);
         q.m_vertices.push_back(element.first);
-        max_clique(q, get_connected(element.first));
+        max_clique(q, q.m_candidates);
     }
     auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
     std::cout << elapsed.count() << " " << optimal_clique.m_vertices.size() << " " << pretty_print(optimal_clique) << std::endl;
