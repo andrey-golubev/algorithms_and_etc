@@ -123,17 +123,21 @@ namespace
 
 int main(int argc, char* argv[]) try
 {
-    if (argc < 2) return 1;
-    time_limit = std::atof(argv[2]); // in seconds
-    if (time_limit == 0)
+    if (argc < 3)
     {
-        ERROR_OUT("Time limit is incorrect")
+        ERROR_OUT("Command-line arguments: <file> <time limit>. Ex: ./mlp graph.clq 1000");
         return 1;
     }
     std::ifstream f(argv[1]);
     if (!f.good())
     {
-        ERROR_OUT("File is unreachable/not found/etc.")
+        ERROR_OUT("File is unreachable/not found");
+        return 1;
+    }
+    time_limit = std::atof(argv[2]); // in seconds
+    if (time_limit == 0)
+    {
+        ERROR_OUT("Time limit is incorrect");
         return 1;
     }
 
