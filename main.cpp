@@ -22,9 +22,8 @@ namespace
         vertex_array m_candidates = {};
     };
 
-
-    static vertex_matrix adjacency_matrix = {};
     static clique optimal_clique = {};
+    static vertex_matrix neighbours = {}; // holds neighbours of each vertex
 
 //    static std::size_t m_heuristic_size = 0;
 
@@ -47,23 +46,10 @@ namespace
         return out;
     }
 
-    inline vertex_array get_connected(vertex v)
-    {
-        vertex n_vertices = static_cast<vertex>(adjacency_matrix.size());
-        const auto& row = adjacency_matrix[v];
-        vertex_array C = {};
-        // TODO: verify if can calculate from v + 1:
-        for (vertex i = 0; i < n_vertices; ++i)
-        {
-            if (row[i] > 0) { C.push_back(i); }
-        }
-        return C;
-    }
-
     vertex_array find_candidates(const clique& clq, vertex vertex_to_be_added)
     {
         vertex_array out = {};
-        auto connected = get_connected(vertex_to_be_added);
+        auto connected = neighbours[vertex_to_be_added];
         for (const auto& known_candidate : clq.m_candidates)
         {
             for (const auto& possible_candidate : connected)
@@ -156,16 +142,23 @@ int main(int argc, char* argv[]) try
         {
             n_vertices = std::atoll(parsed[2].c_str());
 //            n_edges = std::atoll(parsed[3].c_str());
-            adjacency_matrix.resize(n_vertices, vertex_array(n_vertices, 0));
+            neighbours.resize(n_vertices, vertex_array{});
         }
         if (l0.compare("e") == 0) // format: e <vertex1> <vertex2>
         {
             auto v1 = static_cast<vertex>(std::atoll(parsed[1].c_str())) - 1,
                  v2 = static_cast<vertex>(std::atoll(parsed[2].c_str())) - 1;
-            adjacency_matrix[v1][v2]++;
-            adjacency_matrix[v2][v1]++;
+            // expecting unordered graph
             vertex_degrees_map[v1]++;
             vertex_degrees_map[v2]++;
+            if (v2 > v1) // to reduce number of "branches" inside recursion
+            {
+                neighbours[v1].push_back(v2);
+            }
+            if (v1 > v2) // to reduce number of "branches" inside recursion
+            {
+                neighbours[v2].push_back(v1);
+            }
         }
     }
 
@@ -184,7 +177,7 @@ int main(int argc, char* argv[]) try
     for (const auto& element : vertex_degrees)
     {
         clique q;
-        q.m_candidates = get_connected(element.first);
+        q.m_candidates = neighbours[element.first];
         q.m_vertices.push_back(element.first);
         max_clique(q);
     }
