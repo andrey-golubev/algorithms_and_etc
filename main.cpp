@@ -112,7 +112,7 @@ namespace
         std::string s;
         for (const auto& vertex : Q.m_vertices)
         {
-            s.append(std::to_string(vertex));
+            s.append(std::to_string(vertex + 1));
             s.append(" ");
         }
         return s;
