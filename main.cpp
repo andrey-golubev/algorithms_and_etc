@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <map>
 
+#define ALGO 0
+
 namespace
 {
     using vertex = std::uint64_t;
@@ -24,6 +26,7 @@ namespace
 
     static clique optimal_clique = {};
     static vertex_matrix neighbours = {}; // holds neighbours of each vertex
+    static vertex_array degrees = {};
 
 //    static std::size_t m_heuristic_size = 0;
 
@@ -45,6 +48,16 @@ namespace
         out.push_back(s);
         return out;
     }
+    std::string pretty_print(const clique& Q)
+    {
+        std::string s;
+        for (const auto& vertex : Q.m_vertices)
+        {
+            s.append(std::to_string(vertex + 1));
+            s.append(" ");
+        }
+        return s;
+    }
 
     vertex_array find_candidates(const clique& clq, vertex vertex_to_be_added)
     {
@@ -62,10 +75,89 @@ namespace
         return out;
     }
 
+#if ALGO == 0
     inline std::uint64_t upper_bound(const clique& Q)
     {
         return Q.m_vertices.size() + Q.m_candidates.size();
     }
+#elif ALGO == 1
+    // return pair: min element | count of mins
+    inline std::pair<std::uint64_t, std::size_t> common_degree(const vertex_array& vertices)
+    {
+        vertex_array vertex_degrees = {};
+        for (const auto& vertex : vertices)
+        {
+            vertex_degrees.push_back(degrees.at(vertex));
+        }
+        std::uint64_t min = *std::min_element(vertex_degrees.begin(), vertex_degrees.end());
+        return std::make_pair(min, std::count(vertex_degrees.begin(), vertex_degrees.end(), min));
+    }
+
+    inline std::uint64_t upper_bound(const clique& Q) // via coloring
+    {
+        auto clique_size = Q.m_vertices.size();
+        std::int64_t x_index = Q.m_candidates.size();
+        if (x_index <= 0) { return clique_size; }
+        auto pair = common_degree(Q.m_candidates);
+        for (; x_index > 0; --x_index)
+        {
+            if (pair.first >= (clique_size + x_index + 1) && x_index == pair.second)
+                break;
+        }
+        return clique_size + x_index;
+    }
+#elif ALGO == 2
+    inline std::uint64_t colors(const vertex_array& vertices)
+    {
+        auto size = vertices.size();
+        if (size <= 0) return 0;
+        std::map<vertex, int> colors;
+
+        for (const auto& vertex : vertices)
+        {
+            std::vector<int> neighbour_colors;
+            for (const auto& neighbour : neighbours[vertex])
+            {
+                neighbour_colors.push_back(colors[neighbour]);
+            }
+
+            bool vertex_colored = false;
+            int supposed_color = 1;
+            while (vertex_colored != true)
+            {
+                bool color_of_neighbour = false;
+                for (const auto& color : neighbour_colors)
+                    if (color == supposed_color)
+                    {
+                        color_of_neighbour = true;
+                        break;
+                    }
+                if (color_of_neighbour)
+                {
+                    supposed_color++;
+                    continue;
+                }
+                colors[vertex] = supposed_color;
+                vertex_colored = true;
+            }
+        }
+        return std::max_element(colors.begin(), colors.end())->second;
+//        vertex_array colored = {};
+//        return size;
+    }
+
+    inline std::uint64_t upper_bound(const clique& Q)
+    {
+//        vertex_array sliced_candidates = {};
+//        auto last_added_vertex = Q.m_vertices.back();
+//        for (const auto& candidate : Q.m_candidates)
+//        {
+//            if (candidate > last_added_vertex)
+//                sliced_candidates.push_back(candidate);
+//        }
+        return Q.m_vertices.size() + colors(Q.m_candidates);
+    }
+#endif
 
     void max_clique(const clique& Q)
     {
@@ -74,6 +166,7 @@ namespace
 //        if (ub <= m_heuristic_size) return;
         if (Q.m_candidates.size() == 0)
         {
+//            std::cout << "Optimum changed: ub: " << ub << " q: " << Q.m_vertices.size() << " vertices: " << pretty_print(Q) << std::endl;
             optimal_clique = Q;
             return;
         }
@@ -86,22 +179,13 @@ namespace
 
         for (const auto& candidate : Q.m_candidates)
         {
+            if (candidate <= Q.m_vertices.back()) continue;
+
             auto temp_q = Q;
             temp_q.m_candidates = find_candidates(temp_q, candidate);
             temp_q.m_vertices.push_back(candidate);
             max_clique(temp_q);
         }
-    }
-
-    std::string pretty_print(const clique& Q)
-    {
-        std::string s;
-        for (const auto& vertex : Q.m_vertices)
-        {
-            s.append(std::to_string(vertex + 1));
-            s.append(" ");
-        }
-        return s;
     }
 
 #define ERROR_OUT(msg) std::cerr << msg << std::endl;
@@ -143,6 +227,7 @@ int main(int argc, char* argv[]) try
             n_vertices = std::atoll(parsed[2].c_str());
 //            n_edges = std::atoll(parsed[3].c_str());
             neighbours.resize(n_vertices, vertex_array{});
+            degrees.resize(n_vertices, 0);
         }
         if (l0.compare("e") == 0) // format: e <vertex1> <vertex2>
         {
@@ -151,14 +236,10 @@ int main(int argc, char* argv[]) try
             // expecting unordered graph
             vertex_degrees_map[v1]++;
             vertex_degrees_map[v2]++;
-            if (v2 > v1) // to reduce number of "branches" inside recursion
-            {
-                neighbours[v1].push_back(v2);
-            }
-            if (v1 > v2) // to reduce number of "branches" inside recursion
-            {
-                neighbours[v2].push_back(v1);
-            }
+            neighbours[v1].push_back(v2);
+            neighbours[v2].push_back(v1);
+            degrees[v1]++;
+            degrees[v2]++;
         }
     }
 
