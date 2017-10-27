@@ -26,8 +26,6 @@ namespace
     static vertex_matrix adjacency_matrix = {};
     static clique optimal_clique = {};
 
-//    static std::size_t m_heuristic_size = 0;
-
     static double time_limit = 0;
 
     static auto start_time = _chrono::now();
@@ -75,39 +73,7 @@ namespace
 
         return out;
     }
-#define ALGO 2
-#if ALGO == 0
-    inline std::uint64_t upper_bound(const clique& Q)
-    {
-        return Q.m_vertices.size() + Q.m_candidates.size();
-    }
-#elif ALGO == 1
-    // return pair: min element | count of mins
-    inline std::pair<std::uint64_t, std::size_t> common_degree(const vertex_array& vertices)
-    {
-        vertex_array vertex_degrees = {};
-        for (const auto& vertex : vertices)
-        {
-            vertex_degrees.push_back(degrees.at(vertex));
-        }
-        std::uint64_t min = *std::min_element(vertex_degrees.begin(), vertex_degrees.end());
-        return std::make_pair(min, std::count(vertex_degrees.begin(), vertex_degrees.end(), min));
-    }
 
-    inline std::uint64_t upper_bound(const clique& Q) // via coloring
-    {
-        auto clique_size = Q.m_vertices.size();
-        std::int64_t x_index = Q.m_candidates.size();
-        if (x_index <= 0) { return clique_size; }
-        auto pair = common_degree(Q.m_candidates);
-        for (; x_index > 0; --x_index)
-        {
-            if (pair.first >= (clique_size + x_index + 1) && x_index == pair.second)
-                break;
-        }
-        return clique_size + x_index;
-    }
-#elif ALGO == 2
     inline std::uint64_t colors(const vertex_array& vertices)
     {
         auto size = vertices.size();
@@ -143,29 +109,17 @@ namespace
             }
         }
         return std::max_element(colors.begin(), colors.end())->second;
-//        vertex_array colored = {};
-//        return size;
     }
 
     inline std::uint64_t upper_bound(const clique& Q)
     {
-        vertex_array sliced_candidates = {};
-        auto last_added_vertex = Q.m_vertices.back();
-        for (const auto& candidate : Q.m_candidates)
-        {
-            if (candidate > last_added_vertex)
-                sliced_candidates.push_back(candidate);
-        }
-        return Q.m_vertices.size() + colors(sliced_candidates);
-//        return Q.m_vertices.size() + colors(Q.m_candidates);
+        return Q.m_vertices.size() + colors(Q.m_candidates);
     }
-#endif
 
     void max_clique(const clique& Q)
     {
         auto ub = upper_bound(Q);
         if (ub <= optimal_clique.m_vertices.size()) return;
-//        if (ub <= m_heuristic_size) return;
         if (Q.m_candidates.size() == 0)
         {
             optimal_clique = Q;
@@ -276,6 +230,5 @@ int main(int argc, char* argv[]) try
 catch (const std::exception&)
 {
     std::cout << time_limit << " " << optimal_clique.m_vertices.size() << " " << pretty_print(optimal_clique) << std::endl;
-//    std::cout << time_limit << " 0 " << pretty_print(optimal_clique) << std::endl;
     return 1;
 }
