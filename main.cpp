@@ -9,8 +9,6 @@
 #include <algorithm>
 #include <map>
 
-#define ALGO 0
-
 namespace
 {
     using vertex = std::uint64_t;
@@ -24,9 +22,9 @@ namespace
         vertex_array m_candidates = {};
     };
 
+
+    static vertex_matrix adjacency_matrix = {};
     static clique optimal_clique = {};
-    static vertex_matrix neighbours = {}; // holds neighbours of each vertex
-    static vertex_array degrees = {};
 
 //    static std::size_t m_heuristic_size = 0;
 
@@ -48,21 +46,24 @@ namespace
         out.push_back(s);
         return out;
     }
-    std::string pretty_print(const clique& Q)
+
+    inline vertex_array get_connected(vertex v, vertex start_index = 0)
     {
-        std::string s;
-        for (const auto& vertex : Q.m_vertices)
+        vertex n_vertices = static_cast<vertex>(adjacency_matrix.size());
+        const auto& row = adjacency_matrix[v];
+        vertex_array C = {};
+        // TODO: verify if can calculate from v + 1:
+        for (vertex i = start_index; i < n_vertices; ++i)
         {
-            s.append(std::to_string(vertex + 1));
-            s.append(" ");
+            if (row[i] > 0) { C.push_back(i); }
         }
-        return s;
+        return C;
     }
 
     vertex_array find_candidates(const clique& clq, vertex vertex_to_be_added)
     {
         vertex_array out = {};
-        auto connected = neighbours[vertex_to_be_added];
+        auto connected = get_connected(vertex_to_be_added);
         for (const auto& known_candidate : clq.m_candidates)
         {
             for (const auto& possible_candidate : connected)
@@ -74,7 +75,7 @@ namespace
 
         return out;
     }
-
+#define ALGO 2
 #if ALGO == 0
     inline std::uint64_t upper_bound(const clique& Q)
     {
@@ -116,7 +117,7 @@ namespace
         for (const auto& vertex : vertices)
         {
             std::vector<int> neighbour_colors;
-            for (const auto& neighbour : neighbours[vertex])
+            for (const auto& neighbour : get_connected(vertex))
             {
                 neighbour_colors.push_back(colors[neighbour]);
             }
@@ -148,14 +149,15 @@ namespace
 
     inline std::uint64_t upper_bound(const clique& Q)
     {
-//        vertex_array sliced_candidates = {};
-//        auto last_added_vertex = Q.m_vertices.back();
-//        for (const auto& candidate : Q.m_candidates)
-//        {
-//            if (candidate > last_added_vertex)
-//                sliced_candidates.push_back(candidate);
-//        }
-        return Q.m_vertices.size() + colors(Q.m_candidates);
+        vertex_array sliced_candidates = {};
+        auto last_added_vertex = Q.m_vertices.back();
+        for (const auto& candidate : Q.m_candidates)
+        {
+            if (candidate > last_added_vertex)
+                sliced_candidates.push_back(candidate);
+        }
+        return Q.m_vertices.size() + colors(sliced_candidates);
+//        return Q.m_vertices.size() + colors(Q.m_candidates);
     }
 #endif
 
@@ -166,7 +168,6 @@ namespace
 //        if (ub <= m_heuristic_size) return;
         if (Q.m_candidates.size() == 0)
         {
-//            std::cout << "Optimum changed: ub: " << ub << " q: " << Q.m_vertices.size() << " vertices: " << pretty_print(Q) << std::endl;
             optimal_clique = Q;
             return;
         }
@@ -179,13 +180,22 @@ namespace
 
         for (const auto& candidate : Q.m_candidates)
         {
-            if (candidate <= Q.m_vertices.back()) continue;
-
             auto temp_q = Q;
             temp_q.m_candidates = find_candidates(temp_q, candidate);
             temp_q.m_vertices.push_back(candidate);
             max_clique(temp_q);
         }
+    }
+
+    std::string pretty_print(const clique& Q)
+    {
+        std::string s;
+        for (const auto& vertex : Q.m_vertices)
+        {
+            s.append(std::to_string(vertex + 1));
+            s.append(" ");
+        }
+        return s;
     }
 
 #define ERROR_OUT(msg) std::cerr << msg << std::endl;
@@ -226,20 +236,16 @@ int main(int argc, char* argv[]) try
         {
             n_vertices = std::atoll(parsed[2].c_str());
 //            n_edges = std::atoll(parsed[3].c_str());
-            neighbours.resize(n_vertices, vertex_array{});
-            degrees.resize(n_vertices, 0);
+            adjacency_matrix.resize(n_vertices, vertex_array(n_vertices, 0));
         }
         if (l0.compare("e") == 0) // format: e <vertex1> <vertex2>
         {
             auto v1 = static_cast<vertex>(std::atoll(parsed[1].c_str())) - 1,
                  v2 = static_cast<vertex>(std::atoll(parsed[2].c_str())) - 1;
-            // expecting unordered graph
+            adjacency_matrix[v1][v2]++;
+            adjacency_matrix[v2][v1]++;
             vertex_degrees_map[v1]++;
             vertex_degrees_map[v2]++;
-            neighbours[v1].push_back(v2);
-            neighbours[v2].push_back(v1);
-            degrees[v1]++;
-            degrees[v2]++;
         }
     }
 
@@ -258,7 +264,7 @@ int main(int argc, char* argv[]) try
     for (const auto& element : vertex_degrees)
     {
         clique q;
-        q.m_candidates = neighbours[element.first];
+        q.m_candidates = get_connected(element.first);
         q.m_vertices.push_back(element.first);
         max_clique(q);
     }
