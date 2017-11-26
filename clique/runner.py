@@ -37,7 +37,7 @@ if __name__ == "__main__":
 
     with open(args.out_csv_file, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile, delimiter=';')#fieldnames=list(row.keys()))
-        writer.writerow(['File','Time','Max found clique size',"File Description"])
+        writer.writerow(['File','Time(sec)','Max found clique size',"File Description"])
         for out, file in zip(outputs, data_files):
             time, max_size = out.split(" ")[:2]
             import ntpath
