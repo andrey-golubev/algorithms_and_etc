@@ -165,13 +165,25 @@ namespace
         return all_constraints;
     }
 
-    std::string pretty_print(const clique& Q)
+    template<typename T>
+    bool is_almost_equal(T a, T b, int units_in_last_place = 2)
+    {
+        return std::abs(a - b) <= std::numeric_limits<T>::epsilon()
+                                  * std::max(std::abs(a), std::abs(b))
+                                  * units_in_last_place
+               || std::abs(a - b) < std::numeric_limits<T>::min(); // subnormal result
+    }
+
+    std::string pretty_print(const IloNumArray& vertices)
     {
         std::string s;
-        for (const auto& vertex : Q.m_vertices)
+        for (int i = 0; i < num_vertices; i++)
         {
-            s.append(std::to_string(vertex + 1));
-            s.append(" ");
+            if (is_almost_equal(vertices[i], 1.0))
+            {
+                s.append(std::to_string(i + 1));
+                s.append(" ");
+            }
         }
         return s;
     }
@@ -189,14 +201,14 @@ namespace
     static IloNumVarArray& get_X()
     {
         assert(num_vertices != 0);
-        static IloNumVarArray vars(get_cplex_env(), num_vertices);
+        static IloNumVarArray vars(get_cplex_env(), num_vertices, 0.0, 1.0);
         return vars;
     }
 
     static IloModel& get_cplex_model()
     {
         static IloModel cplex_model(get_cplex_env());
-//        cplex_model.add(IloMaximize(get_cplex_empty_vars()));
+//        cplex_model.add(IloMaximize(get_X()));
         return cplex_model;
     }
 
@@ -207,40 +219,40 @@ namespace
         return cplex_algo;
     }
 
-    static std::vector<IloNumVarArray> get_cplex_constraints(const vertex_matrix& adj_m)
+    static IloObjective& get_cplex_objective()
     {
+        static IloObjective obj_function = IloMaximize(get_cplex_env());
+        return obj_function;
+    }
+
+    void set_up_cplex(const vertex_matrix& adj_m)
+    {
+        auto& obj_function = get_cplex_objective();
+        auto& vars = get_X();
+        for (int i = 0; i < num_vertices; ++i)
+        {
+            obj_function.setLinearCoef(vars[i], 1);
+        }
+
         auto& env = get_cplex_env();
-        std::vector<IloNumVarArray> all_constaints{};
+        IloRangeArray constraints(env);
+        std::size_t constaint_num = 0;
         for (int row_num = 0, size = adj_m.size(); row_num < size; ++row_num)
         {
             for (int i = 0; i < num_vertices; ++i)
             {
                 if (row_num != i && adj_m[row_num][i] == 0)
                 {
-                    IloNumVarArray vars(env, num_vertices);
-//                    vars[row_num] = IloNumVar(1);
-//                    vars[i] = 1;
-                    all_constaints.emplace_back(vars);
+                    constraints.add(IloRange(env, 0.0, 1.0));
+                    constraints[constaint_num].setLinearCoef(vars[row_num], 1.0);
+                    constraints[constaint_num].setLinearCoef(vars[i], 1.0);
+                    constaint_num++;
                 }
             }
         }
-        return all_constaints;
-    }
-
-    static IloObjective& get_cplex_objective()
-    {
-        static IloObjective obj_function = IloMaximize(get_cplex_env());
-        auto& vars = get_X();
-        for (int i = 0; i < num_vertices; ++i)
-        {
-            obj_function.setLinearCoef(vars[i], 1);
-        }
-    }
-
-    void set_up_cplex(const vertex_matrix& adj_m)
-    {
-        IloRangeArray column(get_cplex_env());
-        get_cplex_model().add(get_cplex_objective());
+        auto& model = get_cplex_model();
+        model.add(get_cplex_objective());
+        model.add(constraints);
     }
 }
 
@@ -265,7 +277,6 @@ int main(int argc, char* argv[]) try
     }
 
     std::string line;
-//    std::size_t n_edges = 0;
     static constexpr char default_delim[] = " ";
     while (!f.eof())
     {
@@ -276,7 +287,6 @@ int main(int argc, char* argv[]) try
         if (l0.compare("p") == 0) // format: p col <n_vertices> <n_edges>
         {
             num_vertices = std::atoll(parsed[2].c_str());
-//            n_edges = std::atoll(parsed[3].c_str());
             adjacency_matrix.resize(num_vertices, vertex_array(num_vertices, 0));
         }
         if (l0.compare("e") == 0) // format: e <vertex1> <vertex2>
@@ -290,18 +300,25 @@ int main(int argc, char* argv[]) try
 
     start_time = _chrono::now();
 
-    auto constraints = get_constraints(adjacency_matrix);
-    auto v = get_X();
-
-//    get_cplex_algo().extract(get_cplex_model());
-
+    set_up_cplex(adjacency_matrix);
+    auto& cplex = get_cplex_algo();
+    if (!cplex.solve())
+    {
+        ERROR_OUT("IloCplex::solve() failed");
+        return 1;
+    }
     auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
-    std::cout << elapsed.count() << " " << optimal_clique.m_vertices.size() << " " << pretty_print(optimal_clique) << std::endl;
-
+    IloNumArray vals(get_cplex_env());
+    cplex.getValues(vals, get_X());
+    std::cout << elapsed.count() << " " << cplex.getObjValue() << " " << pretty_print(vals) << std::endl;
     return 0;
 }
 catch (const std::exception&)
 {
-    std::cout << time_limit << " " << optimal_clique.m_vertices.size() << " " << pretty_print(optimal_clique) << std::endl;
+    auto& cplex = get_cplex_algo();
+    cplex.end();
+    IloNumArray vals(get_cplex_env());
+    cplex.getValues(vals, get_X());
+    std::cout << time_limit << " " << cplex.getObjValue() << " " << pretty_print(vals) << std::endl;
     return 1;
 }
