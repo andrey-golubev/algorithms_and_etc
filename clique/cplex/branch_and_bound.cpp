@@ -263,6 +263,12 @@ namespace
             ERROR_OUT("IloCplex::solve() failed");
             std::exit(EXIT_FAILURE);
         }
+
+        // if non-integer solution is worse than current best - return immediately
+        auto current_obj_val = static_cast<int>(cplex.getObjValue());
+        if (objective_value >= current_obj_val)
+            return bnb_status::nothing_found;
+
         cplex.getValues(vals, get_X());
         auto result = get_noninteger_values(vals);
         auto nonInts = std::get<0>(result);
@@ -289,10 +295,6 @@ namespace
         }
         else
         {
-            auto current_obj_val = static_cast<int>(cplex.getObjValue()); // must be integer value anyway
-            if (objective_value >= current_obj_val)
-                return bnb_status::nothing_found;
-
             objective_value = current_obj_val;
             optimal_values = vals.toIntArray();
             if (objective_value == global_ub)
