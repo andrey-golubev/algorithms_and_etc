@@ -20,7 +20,7 @@ namespace
     using vertex_matrix = std::vector<vertex_array>;
     using _chrono = std::chrono::steady_clock;
 
-    std::size_t num_vertices = 0;
+    int num_vertices = 0;
     static vertex_matrix adjacency_matrix = {};
     static double time_limit = 0;
     static auto start_time = _chrono::now();
@@ -177,37 +177,22 @@ namespace
         }
 
         auto& env = get_cplex_env();
-        IloRangeArray constraints(env);
-        std::size_t constaint_num = 0;
+        IloConstraintArray constraints(env);
         for (int row_num = 0, size = adj_m.size(); row_num < size; ++row_num)
         {
             for (int i = 0; i < num_vertices; ++i)
             {
                 if (row_num != i && adj_m[row_num][i] == 0)
                 {
-                    constraints.add(IloRange(env, 0.0, 1.0));
-                    constraints[constaint_num].setLinearCoef(vars[row_num], 1.0);
-                    constraints[constaint_num].setLinearCoef(vars[i], 1.0);
-                    constaint_num++;
+                    IloExpr expr(env);
+                    expr += vars[row_num] + vars[i];
+                    constraints.add(IloConstraint(expr <= 1.0));
                 }
             }
         }
         auto& model = get_cplex_model();
         model.add(get_cplex_objective());
         model.add(constraints);
-    }
-
-    bool all_integers(const IloNumArray& values)
-    {
-        for (int i = 0; i < num_vertices; i++)
-        {
-            const IloNum& value = values[i];
-            if (!is_almost_equal(value, 0.0) && !is_almost_equal(value, 1.0))
-            {
-                return false;
-            }
-        }
-        return true;
     }
 
     std::tuple<std::vector<IloNum>, int> get_noninteger_values(const IloNumArray& values)
@@ -240,6 +225,10 @@ namespace
         error = 3
     };
 
+    // optimal solution will be stored in these variables:
+    int max_clique_size = 0;
+    IloIntArray max_clique_values(get_cplex_env());
+
     /**
      * @brief BnB main function to execute branching logic to find integer solution
      *
@@ -247,16 +236,8 @@ namespace
      * @param[out] optimal_values   Values array. Also represents current best solution.
      * @return bnb_status
      */
-    bnb_status branch_and_bound(int& objective_value, IloIntArray& optimal_values) try
+    bnb_status branch_and_bound() try
     {
-        auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
-        if (elapsed.count() > time_limit)
-        {
-            throw std::runtime_error("Out of time");
-        }
-
-        auto& env = get_cplex_env();
-        IloNumArray vals(env);
         auto& cplex = get_cplex_algo();
         if (!cplex.solve())
         {
@@ -264,11 +245,19 @@ namespace
             std::exit(EXIT_FAILURE);
         }
 
+        auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
+        if (elapsed.count() > time_limit)
+        {
+            throw std::runtime_error("Out of time");
+        }
+
         // if non-integer solution is worse than current best - return immediately
         auto current_obj_val = static_cast<int>(cplex.getObjValue());
-        if (objective_value >= current_obj_val)
+        if (max_clique_size >= current_obj_val)
             return bnb_status::nothing_found;
 
+        auto& env = get_cplex_env();
+        IloNumArray vals(env);
         cplex.getValues(vals, get_X());
         auto result = get_noninteger_values(vals);
         auto nonInts = std::get<0>(result);
@@ -281,23 +270,23 @@ namespace
             IloConstraint c1(expr >= 1.0);
             auto& model = get_cplex_model();
             model.add(c1);
-            auto sts1 = branch_and_bound(objective_value, optimal_values);
+            auto sts1 = branch_and_bound();
             if (sts1 == bnb_status::found_optimal_solution)
                 return sts1;
             model.remove(c1);
 
             IloConstraint c2(expr <= 0.0);
             model.add(c2);
-            auto sts2 = branch_and_bound(objective_value, optimal_values);
+            auto sts2 = branch_and_bound();
             if (sts2 == bnb_status::found_optimal_solution)
                     return sts2;
             model.remove(c2);
         }
         else
         {
-            objective_value = current_obj_val;
-            optimal_values = vals.toIntArray();
-            if (objective_value == global_ub)
+            max_clique_size = current_obj_val;
+            max_clique_values = vals.toIntArray();
+            if (max_clique_size == global_ub)
                 return bnb_status::found_optimal_solution; // helps to reduce unnecessary calculations
             return bnb_status::found_integer_solution;
         }
@@ -310,7 +299,7 @@ namespace
     }
 }
 
-#define WITH_INITIAL_HEURISTIC 0
+#define WITH_INITIAL_HEURISTIC 1
 
 int main(int argc, char* argv[]) try
 {
@@ -377,20 +366,14 @@ int main(int argc, char* argv[]) try
     if (global_ub > colors_num) global_ub = colors_num; // better upper-bound
 #endif
 
-    IloIntArray values(get_cplex_env());
-
-    int max_clique_size = 0;
-    branch_and_bound(max_clique_size, values);
+    branch_and_bound();
     auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
-    std::cout << elapsed.count() << " " << static_cast<int>(max_clique_size) << " " << pretty_print(values) << std::endl;
+    std::cout << elapsed.count() << " " << static_cast<int>(max_clique_size) << " " << pretty_print(max_clique_values) << std::endl;
     return 0;
 }
 catch (const std::exception&)
 {
-    auto& cplex = get_cplex_algo();
-    cplex.end();
-    IloNumArray values(get_cplex_env());
-    cplex.getValues(values, get_X());
-    std::cout << time_limit << " " << static_cast<int>(cplex.getObjValue()) << " " << pretty_print(values) << std::endl;
+    get_cplex_algo().end();
+    std::cout << time_limit << " " << static_cast<int>(max_clique_size) << " " << pretty_print(max_clique_values) << std::endl;
     return 1;
 }
