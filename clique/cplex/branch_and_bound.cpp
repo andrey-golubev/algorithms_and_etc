@@ -25,6 +25,60 @@ namespace
     static double time_limit = 0;
     static auto start_time = _chrono::now();
 
+
+    /* heuristic-related */
+    inline vertex_array get_connected(vertex v, vertex start_index = 0)
+    {
+        vertex n_vertices = static_cast<vertex>(adjacency_matrix.size());
+        const auto& row = adjacency_matrix[v];
+        vertex_array C = {};
+        // TODO: verify if can calculate from v + 1:
+        for (vertex i = start_index; i < n_vertices; ++i)
+        {
+            if (row[i] > 0) { C.push_back(i); }
+        }
+        return C;
+    }
+
+    inline std::uint64_t colors(const vertex_array& vertices)
+    {
+        auto size = vertices.size();
+        if (size <= 0) return 0;
+        std::map<vertex, int> colors;
+
+        for (const auto& vertex : vertices)
+        {
+            std::vector<int> neighbour_colors;
+            for (const auto& neighbour : get_connected(vertex))
+            {
+                neighbour_colors.push_back(colors[neighbour]);
+            }
+
+            bool vertex_colored = false;
+            int supposed_color = 1;
+            while (vertex_colored != true)
+            {
+                bool color_of_neighbour = false;
+                for (const auto& color : neighbour_colors)
+                    if (color == supposed_color)
+                    {
+                        color_of_neighbour = true;
+                        break;
+                    }
+                if (color_of_neighbour)
+                {
+                    supposed_color++;
+                    continue;
+                }
+                colors[vertex] = supposed_color;
+                vertex_colored = true;
+            }
+        }
+        return std::max_element(colors.begin(), colors.end())->second;
+    }
+    /* heuristic-related */
+
+
     std::vector<std::string> split(std::string& s, const std::string& delim)
     {
         std::vector<std::string> out = {};
@@ -49,7 +103,7 @@ namespace
                || std::abs(a - b) < std::numeric_limits<T>::min(); // subnormal result
     }
 
-    #define ERROR_OUT(msg) std::cerr << "---\n" << msg << "---" << std::endl;
+    #define ERROR_OUT(msg) std::cerr << "---\n" << msg << "\n---" << std::endl;
 
     std::string pretty_print(const IloIntArray& vertices)
     {
@@ -254,6 +308,8 @@ namespace
     }
 }
 
+#define WITH_INITIAL_HEURISTIC 0
+
 int main(int argc, char* argv[]) try
 {
     if (argc < 3)
@@ -296,6 +352,12 @@ int main(int argc, char* argv[]) try
         }
     }
 
+    vertex_array all_vertices{};
+    for (int i = 0; i < num_vertices; i++)
+    {
+        all_vertices.emplace_back(i);
+    }
+
     start_time = _chrono::now();
 
     set_up_cplex(adjacency_matrix);
@@ -307,6 +369,12 @@ int main(int argc, char* argv[]) try
         return 1;
     }
     global_ub = static_cast<int>(cplex.getObjValue());
+
+#if WITH_INITIAL_HEURISTIC
+    auto colors_num = colors(all_vertices);
+    if (global_ub > colors_num) global_ub = colors_num; // better upper-bound
+#endif
+
     IloIntArray values(get_cplex_env());
 
     int max_clique_size = 0;
