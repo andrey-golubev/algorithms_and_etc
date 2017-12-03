@@ -20,19 +20,9 @@ namespace
     using vertex_matrix = std::vector<vertex_array>;
     using _chrono = std::chrono::steady_clock;
 
-    struct clique
-    {
-        vertex_array m_vertices = {};
-        vertex_array m_candidates = {};
-    };
-
-
     std::size_t num_vertices = 0;
     static vertex_matrix adjacency_matrix = {};
-    static clique optimal_clique = {};
-
     static double time_limit = 0;
-
     static auto start_time = _chrono::now();
 
     std::vector<std::string> split(std::string& s, const std::string& delim)
@@ -50,121 +40,6 @@ namespace
         return out;
     }
 
-    inline vertex_array get_connected(vertex v, vertex start_index = 0)
-    {
-        vertex n_vertices = static_cast<vertex>(adjacency_matrix.size());
-        const auto& row = adjacency_matrix[v];
-        vertex_array C = {};
-        // TODO: verify if can calculate from v + 1:
-        for (vertex i = start_index; i < n_vertices; ++i)
-        {
-            if (row[i] > 0) { C.push_back(i); }
-        }
-        return C;
-    }
-
-    vertex_array find_candidates(const clique& clq, vertex vertex_to_be_added)
-    {
-        vertex_array out = {};
-        auto connected = get_connected(vertex_to_be_added);
-        for (const auto& known_candidate : clq.m_candidates)
-        {
-            for (const auto& possible_candidate : connected)
-            {
-                if (possible_candidate == known_candidate)
-                    out.push_back(possible_candidate);
-            }
-        }
-
-        return out;
-    }
-
-    inline std::uint32_t colors(const vertex_array& vertices)
-    {
-        auto size = vertices.size();
-        if (size <= 0) return 0;
-        std::map<vertex, int> colors;
-
-        for (const auto& vertex : vertices)
-        {
-            std::vector<int> neighbour_colors;
-            for (const auto& neighbour : get_connected(vertex))
-            {
-                neighbour_colors.push_back(colors[neighbour]);
-            }
-
-            bool vertex_colored = false;
-            int supposed_color = 1;
-            while (vertex_colored != true)
-            {
-                bool color_of_neighbour = false;
-                for (const auto& color : neighbour_colors)
-                    if (color == supposed_color)
-                    {
-                        color_of_neighbour = true;
-                        break;
-                    }
-                if (color_of_neighbour)
-                {
-                    supposed_color++;
-                    continue;
-                }
-                colors[vertex] = supposed_color;
-                vertex_colored = true;
-            }
-        }
-        return std::max_element(colors.begin(), colors.end())->second;
-    }
-
-    inline std::uint32_t upper_bound(const clique& Q)
-    {
-        return Q.m_vertices.size() + colors(Q.m_candidates);
-    }
-
-    void max_clique(const clique& Q)
-    {
-        auto ub = upper_bound(Q);
-        if (ub <= optimal_clique.m_vertices.size()) return;
-        if (Q.m_candidates.size() == 0)
-        {
-            optimal_clique = Q;
-            return;
-        }
-
-        auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
-        if (elapsed.count() > time_limit)
-        {
-            throw std::runtime_error("Out of time");
-        }
-
-        for (const auto& candidate : Q.m_candidates)
-        {
-            auto temp_q = Q;
-            temp_q.m_candidates = find_candidates(temp_q, candidate);
-            temp_q.m_vertices.push_back(candidate);
-            max_clique(temp_q);
-        }
-    }
-
-    vertex_matrix get_constraints(const vertex_matrix& adj_m)
-    {
-        vertex_matrix all_constraints{};
-        for (int row_num = 0, size = adj_m.size(); row_num < size; ++row_num)
-        {
-            for (int i = 0; i < num_vertices; ++i)
-            {
-                if (row_num != i && adj_m[row_num][i] == 0)
-                {
-                    vertex_array constraint_row_coeffs(num_vertices, 0);
-                    constraint_row_coeffs[row_num] = 1;
-                    constraint_row_coeffs[i] = 1;
-                    all_constraints.push_back(std::move(constraint_row_coeffs));
-                }
-            }
-        }
-        return all_constraints;
-    }
-
     template<typename T>
     bool is_almost_equal(T a, T b, int units_in_last_place = 2)
     {
@@ -174,9 +49,27 @@ namespace
                || std::abs(a - b) < std::numeric_limits<T>::min(); // subnormal result
     }
 
+    #define ERROR_OUT(msg) std::cerr << "---\n" << msg << "---" << std::endl;
+
+    std::string pretty_print(const IloIntArray& vertices)
+    {
+        std::string s;
+        assert(vertices.getSize() == num_vertices);
+        for (int i = 0; i < num_vertices; i++)
+        {
+            if (vertices[i] == 1)
+            {
+                s.append(std::to_string(i + 1));
+                s.append(" ");
+            }
+        }
+        return s;
+    }
+
     std::string pretty_print(const IloNumArray& vertices)
     {
         std::string s;
+        assert(vertices.getSize() == num_vertices);
         for (int i = 0; i < num_vertices; i++)
         {
             if (is_almost_equal(vertices[i], 1.0))
@@ -188,38 +81,33 @@ namespace
         return s;
     }
 
-#define ERROR_OUT(msg) std::cerr << msg << std::endl;
-
-
-// CPLEX specific:
-    static IloEnv& get_cplex_env()
+    static inline IloEnv& get_cplex_env()
     {
         static IloEnv cplex_env;
         return cplex_env;
     }
 
-    static IloNumVarArray& get_X()
+    static inline IloNumVarArray& get_X()
     {
         assert(num_vertices != 0);
-        static IloNumVarArray vars(get_cplex_env(), num_vertices, 0.0, 1.0);
+        static IloNumVarArray vars(get_cplex_env(), num_vertices, 0.0, +IloInfinity);
         return vars;
     }
 
-    static IloModel& get_cplex_model()
+    static inline IloModel& get_cplex_model()
     {
         static IloModel cplex_model(get_cplex_env());
-//        cplex_model.add(IloMaximize(get_X()));
         return cplex_model;
     }
 
-    static IloCplex& get_cplex_algo()
+    static inline IloCplex& get_cplex_algo()
     {
         static IloCplex cplex_algo(get_cplex_model());
         cplex_algo.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Concurrent);
         return cplex_algo;
     }
 
-    static IloObjective& get_cplex_objective()
+    static inline IloObjective& get_cplex_objective()
     {
         static IloObjective obj_function = IloMaximize(get_cplex_env());
         return obj_function;
@@ -253,6 +141,116 @@ namespace
         auto& model = get_cplex_model();
         model.add(get_cplex_objective());
         model.add(constraints);
+    }
+
+    bool all_integers(const IloNumArray& values)
+    {
+        for (int i = 0; i < num_vertices; i++)
+        {
+            const IloNum& value = values[i];
+            if (!is_almost_equal(value, 0.0) && !is_almost_equal(value, 1.0))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    std::tuple<std::vector<IloNum>, int> get_noninteger_values(const IloNumArray& values)
+    {
+        std::vector<IloNum> out{};
+        int index_of_max_noninteger = 0;
+        out.reserve(num_vertices);
+        for (int i = 0; i < num_vertices; i++)
+        {
+            const IloNum& value = values[i];
+            if (!is_almost_equal(value, 0.0) && !is_almost_equal(value, 1.0))
+            {
+                out.emplace_back(value);
+                if (value > values[index_of_max_noninteger])
+                {
+                    index_of_max_noninteger = i;
+                }
+            }
+        }
+        return std::make_tuple(out, index_of_max_noninteger);
+    }
+
+    static int global_ub = 0;
+
+    enum class bnb_status : int
+    {
+        found_optimal_solution = 0,
+        found_integer_solution = 1,
+        nothing_found = 2,
+        error = 3
+    };
+
+    /**
+     * @brief BnB main function to execute branching logic to find integer solution
+     *
+     * @param[out] objective_value  Function value. Also represents current best value found.
+     * @param[out] optimal_values   Values array. Also represents current best solution.
+     * @return bnb_status
+     */
+    bnb_status branch_and_bound(int& objective_value, IloIntArray& optimal_values) try
+    {
+        auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
+        if (elapsed.count() > time_limit)
+        {
+            throw std::runtime_error("Out of time");
+        }
+
+        auto& env = get_cplex_env();
+        IloNumArray vals(env);
+        auto& cplex = get_cplex_algo();
+        if (!cplex.solve())
+        {
+            ERROR_OUT("IloCplex::solve() failed");
+            std::exit(EXIT_FAILURE);
+        }
+        cplex.getValues(vals, get_X());
+        auto result = get_noninteger_values(vals);
+        auto nonInts = std::get<0>(result);
+        if (!nonInts.empty())
+        {
+            auto index_to_branch = std::get<1>(result);
+            IloExpr expr(env);
+            auto& array_of_X = get_X();
+            expr += array_of_X[index_to_branch];
+            IloConstraint c1(expr >= 1.0);
+            auto& model = get_cplex_model();
+            model.add(c1);
+            auto sts1 = branch_and_bound(objective_value, optimal_values);
+            if (sts1 == bnb_status::found_optimal_solution)
+                return sts1;
+            model.remove(c1);
+
+            IloConstraint c2(expr <= 0.0);
+            model.add(c2);
+            auto sts2 = branch_and_bound(objective_value, optimal_values);
+            if (sts2 == bnb_status::found_optimal_solution)
+                    return sts2;
+            model.remove(c2);
+        }
+        else
+        {
+            auto current_obj_val = static_cast<int>(cplex.getObjValue()); // must be integer value anyway
+            if (objective_value >= current_obj_val)
+                return bnb_status::nothing_found;
+
+            objective_value = current_obj_val;
+            optimal_values = vals.toIntArray();
+            if (objective_value == global_ub)
+                return bnb_status::found_optimal_solution; // helps to reduce unnecessary calculations
+            return bnb_status::found_integer_solution;
+        }
+    }
+    catch (const IloException& e)
+    {
+        std::string msg(e.getMessage());
+        ERROR_OUT(msg);
+        std::exit(EXIT_FAILURE);
     }
 }
 
@@ -302,23 +300,27 @@ int main(int argc, char* argv[]) try
 
     set_up_cplex(adjacency_matrix);
     auto& cplex = get_cplex_algo();
+    cplex.setOut(get_cplex_env().getNullStream());
     if (!cplex.solve())
     {
         ERROR_OUT("IloCplex::solve() failed");
         return 1;
     }
+    global_ub = static_cast<int>(cplex.getObjValue());
+    IloIntArray values(get_cplex_env());
+
+    int max_clique_size = 0;
+    branch_and_bound(max_clique_size, values);
     auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
-    IloNumArray vals(get_cplex_env());
-    cplex.getValues(vals, get_X());
-    std::cout << elapsed.count() << " " << cplex.getObjValue() << " " << pretty_print(vals) << std::endl;
+    std::cout << elapsed.count() << " " << static_cast<int>(max_clique_size) << " " << pretty_print(values) << std::endl;
     return 0;
 }
 catch (const std::exception&)
 {
     auto& cplex = get_cplex_algo();
     cplex.end();
-    IloNumArray vals(get_cplex_env());
-    cplex.getValues(vals, get_X());
-    std::cout << time_limit << " " << cplex.getObjValue() << " " << pretty_print(vals) << std::endl;
+    IloNumArray values(get_cplex_env());
+    cplex.getValues(values, get_X());
+    std::cout << time_limit << " " << static_cast<int>(cplex.getObjValue()) << " " << pretty_print(values) << std::endl;
     return 1;
 }
