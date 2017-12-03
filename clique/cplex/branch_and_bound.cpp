@@ -40,10 +40,10 @@ namespace
         return C;
     }
 
-    inline std::uint64_t colors(const vertex_array& vertices)
+    inline std::map<vertex, int> get_color_sets(const vertex_array& vertices)
     {
         auto size = vertices.size();
-        if (size <= 0) return 0;
+        assert(size == num_vertices);
         std::map<vertex, int> colors;
 
         for (const auto& vertex : vertices)
@@ -74,7 +74,7 @@ namespace
                 vertex_colored = true;
             }
         }
-        return std::max_element(colors.begin(), colors.end())->second;
+        return colors;
     }
     /* heuristic-related */
 
@@ -144,7 +144,7 @@ namespace
     static inline IloNumVarArray& get_X()
     {
         assert(num_vertices != 0);
-        static IloNumVarArray vars(get_cplex_env(), num_vertices, 0.0, +IloInfinity);
+        static IloNumVarArray vars(get_cplex_env(), num_vertices, 0.0, 1.0);
         return vars;
     }
 
@@ -167,7 +167,9 @@ namespace
         return obj_function;
     }
 
-    void set_up_cplex(const vertex_matrix& adj_m)
+#define SOLVE_WITH_HEURISTIC 1
+
+    void set_up_cplex(const vertex_matrix& adj_m, const std::map<vertex, int>& color_sets = {}, int colors_num = 0)
     {
         auto& obj_function = get_cplex_objective();
         auto& vars = get_X();
@@ -178,6 +180,25 @@ namespace
 
         auto& env = get_cplex_env();
         IloConstraintArray constraints(env);
+
+#if SOLVE_WITH_HEURISTIC
+        std::vector<vertex_array> independent_sets(colors_num, vertex_array{});
+        for (const auto& vertex_color_pair : color_sets)
+        {
+            // colors start from 1, not 0:
+            independent_sets[vertex_color_pair.second-1].emplace_back(vertex_color_pair.first);
+        }
+        for (const auto& set : independent_sets)
+        {
+            IloExpr expr(env);
+            for (const auto& vertex : set)
+            {
+                expr += vars[vertex];
+            }
+            constraints.add(IloConstraint(expr <= 1.0));
+        }
+#else
+
         for (int row_num = 0, size = adj_m.size(); row_num < size; ++row_num)
         {
             for (int i = 0; i < num_vertices; ++i)
@@ -190,6 +211,7 @@ namespace
                 }
             }
         }
+#endif
         auto& model = get_cplex_model();
         model.add(get_cplex_objective());
         model.add(constraints);
@@ -299,8 +321,6 @@ namespace
     }
 }
 
-#define WITH_INITIAL_HEURISTIC 1
-
 int main(int argc, char* argv[]) try
 {
     if (argc < 3)
@@ -351,7 +371,13 @@ int main(int argc, char* argv[]) try
 
     start_time = _chrono::now();
 
+#if SOLVE_WITH_HEURISTIC
+    auto color_sets = get_color_sets(all_vertices);
+    auto colors_num = std::max_element(color_sets.begin(), color_sets.end())->second;
+    set_up_cplex(adjacency_matrix, color_sets, colors_num);
+#else
     set_up_cplex(adjacency_matrix);
+#endif
     auto& cplex = get_cplex_algo();
     cplex.setOut(get_cplex_env().getNullStream());
     if (!cplex.solve())
@@ -360,9 +386,7 @@ int main(int argc, char* argv[]) try
         return 1;
     }
     global_ub = static_cast<int>(cplex.getObjValue());
-
-#if WITH_INITIAL_HEURISTIC
-    auto colors_num = colors(all_vertices);
+#if SOLVE_WITH_HEURISTIC
     if (global_ub > colors_num) global_ub = colors_num; // better upper-bound
 #endif
 
