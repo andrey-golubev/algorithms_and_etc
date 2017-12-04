@@ -197,8 +197,7 @@ namespace
             }
             constraints.add(IloConstraint(expr <= 1.0));
         }
-#else
-
+#endif
         for (int row_num = 0, size = adj_m.size(); row_num < size; ++row_num)
         {
             for (int i = 0; i < num_vertices; ++i)
@@ -211,16 +210,18 @@ namespace
                 }
             }
         }
-#endif
         auto& model = get_cplex_model();
         model.add(get_cplex_objective());
         model.add(constraints);
+
+        get_cplex_algo().setOut(get_cplex_env().getNullStream());
     }
 
     std::tuple<std::vector<IloNum>, int> get_noninteger_values(const IloNumArray& values)
     {
         std::vector<IloNum> out{};
-        int index_of_max_noninteger = 0;
+        IloNum max = -1.0;
+        int index_of_max_noninteger = -1;
         out.reserve(num_vertices);
         for (int i = 0; i < num_vertices; i++)
         {
@@ -228,9 +229,10 @@ namespace
             if (!is_almost_equal(value, 0.0) && !is_almost_equal(value, 1.0))
             {
                 out.emplace_back(value);
-                if (value > values[index_of_max_noninteger])
+                if (value > max)
                 {
                     index_of_max_noninteger = i;
+                    max = value;
                 }
             }
         }
@@ -351,13 +353,13 @@ int main(int argc, char* argv[]) try
         auto parsed = split(line, default_delim);
         if (l0.compare("p") == 0) // format: p col <n_vertices> <n_edges>
         {
-            num_vertices = std::atoll(parsed[2].c_str());
+            num_vertices = std::atoi(parsed[2].c_str());
             adjacency_matrix.resize(num_vertices, vertex_array(num_vertices, 0));
         }
         if (l0.compare("e") == 0) // format: e <vertex1> <vertex2>
         {
-            auto v1 = static_cast<vertex>(std::atoll(parsed[1].c_str())) - 1,
-                 v2 = static_cast<vertex>(std::atoll(parsed[2].c_str())) - 1;
+            auto v1 = static_cast<vertex>(std::atoi(parsed[1].c_str())) - 1,
+                 v2 = static_cast<vertex>(std::atoi(parsed[2].c_str())) - 1;
             adjacency_matrix[v1][v2]++;
             adjacency_matrix[v2][v1]++;
         }
@@ -383,7 +385,6 @@ int main(int argc, char* argv[]) try
     set_up_cplex(adjacency_matrix);
 #endif
     auto& cplex = get_cplex_algo();
-    cplex.setOut(get_cplex_env().getNullStream());
     if (!cplex.solve())
     {
         ERROR_OUT("IloCplex::solve() failed");
