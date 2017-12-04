@@ -373,7 +373,11 @@ int main(int argc, char* argv[]) try
 
 #if SOLVE_WITH_HEURISTIC
     auto color_sets = get_color_sets(all_vertices);
-    auto colors_num = std::max_element(color_sets.begin(), color_sets.end())->second;
+    auto colors_num = std::max_element(color_sets.begin(), color_sets.end(),
+                                       [](const auto& p1, const auto& p2)
+    {
+        return p1.second < p2.second;
+    })->second;
     set_up_cplex(adjacency_matrix, color_sets, colors_num);
 #else
     set_up_cplex(adjacency_matrix);

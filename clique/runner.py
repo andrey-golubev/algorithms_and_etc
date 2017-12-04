@@ -38,7 +38,12 @@ if __name__ == "__main__":
     with open(args.out_csv_file, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile, delimiter=';')#fieldnames=list(row.keys()))
         writer.writerow(['File','Time(sec)','Max found clique size',"File Description"])
+        file_num = 1
         for out, file in zip(outputs, data_files):
-            time, max_size = out.split(" ")[:2]
+            time_and_max_size = out.split(" ")[:2]
+            if len(time_and_max_size) < 2:
+                print("Failed on file:", file)
+                continue
+            time, max_size = time_and_max_size
             import ntpath
             writer.writerow([ntpath.basename(file), time, max_size, ""])
