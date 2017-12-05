@@ -241,14 +241,6 @@ namespace
 
     static int global_ub = 0;
 
-    enum class bnb_status : int
-    {
-        found_optimal_solution = 0,
-        found_integer_solution = 1,
-        nothing_found = 2,
-        error = 3
-    };
-
     // optimal solution will be stored in these variables:
     int max_clique_size = 0;
     IloIntArray max_clique_values(get_cplex_env());
@@ -258,9 +250,10 @@ namespace
      *
      * @param[out] objective_value  Function value. Also represents current best value found.
      * @param[out] optimal_values   Values array. Also represents current best solution.
-     * @return bnb_status
+     * @return true                 Solution that equals global UB is found
+     * @return false                Otherwise
      */
-    bnb_status branch_and_bound() try
+    bool branch_and_bound() try
     {
         auto& cplex = get_cplex_algo();
         if (!cplex.solve())
@@ -278,7 +271,7 @@ namespace
         // if non-integer solution is worse than current best - return immediately
         auto current_obj_val = static_cast<int>(cplex.getObjValue());
         if (max_clique_size >= current_obj_val)
-            return bnb_status::nothing_found;
+            return false;
 
         auto& env = get_cplex_env();
         IloNumArray vals(env);
@@ -294,16 +287,14 @@ namespace
             IloConstraint c1(expr >= 1.0);
             auto& model = get_cplex_model();
             model.add(c1);
-            auto sts1 = branch_and_bound();
-            if (sts1 == bnb_status::found_optimal_solution)
-                return sts1;
+            if (branch_and_bound())
+                return true;
             model.remove(c1);
 
             IloConstraint c2(expr <= 0.0);
             model.add(c2);
-            auto sts2 = branch_and_bound();
-            if (sts2 == bnb_status::found_optimal_solution)
-                    return sts2;
+            if (branch_and_bound())
+                return true;
             model.remove(c2);
         }
         else
@@ -311,9 +302,9 @@ namespace
             max_clique_size = current_obj_val;
             max_clique_values = vals.toIntArray();
             if (max_clique_size == global_ub)
-                return bnb_status::found_optimal_solution; // helps to reduce unnecessary calculations
-            return bnb_status::found_integer_solution;
+                return true; // helps to reduce unnecessary calculations
         }
+        return false;
     }
     catch (const IloException& e)
     {
