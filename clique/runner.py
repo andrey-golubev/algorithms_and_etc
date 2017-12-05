@@ -10,8 +10,10 @@ parser.add_argument('-data_folder', default='data',
                     help='Folder where data files (that describe graphs) are located')
 parser.add_argument('-time_limit',
                     help='Integer value in [seconds] specifying time to wait for each run to finish')
-parser.add_argument('-out_csv_file', default='mlp_res.csv',
+parser.add_argument('-out_csv_file', default='mcp_res.csv',
                     help='File path which run results will be saved to')
+parser.add_argument('-print_sln', default=False,
+                    help='Bool flag to specify if solution will be printed on screen')
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -33,6 +35,8 @@ if __name__ == "__main__":
             print("Error during run: ", error)
             continue
         outputs.append(output.decode('ascii'))
+        if args.print_sln:
+            print("Out:", output)
         print(file, "is finished")
 
     with open(args.out_csv_file, 'w', newline='') as csvfile:
