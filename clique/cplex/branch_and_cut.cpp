@@ -29,21 +29,66 @@ namespace
     /* heuristic-related */
     inline vertex_array get_connected(vertex v, vertex start_index = 0)
     {
-        vertex n_vertices = static_cast<vertex>(adjacency_matrix.size());
         const auto& row = adjacency_matrix[v];
         vertex_array C = {};
-        // TODO: verify if can calculate from v + 1:
-        for (vertex i = start_index; i < n_vertices; ++i)
+        for (vertex i = start_index; i < num_vertices; ++i)
         {
             if (row[i] > 0) { C.push_back(i); }
         }
         return C;
     }
+    inline vertex_array get_connected(vertex v, const vertex_array& vertices, vertex start_index = 0)
+    {
+        const auto& row = adjacency_matrix[v];
+        vertex_array C = {};
+        for (vertex i = start_index; i < num_vertices; ++i)
+        {
+            if (row[i] > 0 && std::find(vertices.cbegin(), vertices.cend(), i) != vertices.cend()) { C.push_back(i); }
+        }
+        return C;
+    }
+
+    inline std::map<vertex, int> get_color_sets_in_range(const vertex_array& vertices)
+    {
+        auto size = vertices.size();
+        assert(size != 0);
+        std::map<vertex, int> colors;
+
+        for (const auto& vertex : vertices)
+        {
+            std::vector<int> neighbour_colors;
+            for (const auto& neighbour : get_connected(vertex, vertices))
+            {
+                neighbour_colors.push_back(colors[neighbour]);
+            }
+
+            bool vertex_colored = false;
+            int supposed_color = 1;
+            while (vertex_colored != true)
+            {
+                bool color_of_neighbour = false;
+                for (const auto& color : neighbour_colors)
+                    if (color == supposed_color)
+                    {
+                        color_of_neighbour = true;
+                        break;
+                    }
+                if (color_of_neighbour)
+                {
+                    supposed_color++;
+                    continue;
+                }
+                colors[vertex] = supposed_color;
+                vertex_colored = true;
+            }
+        }
+        return colors;
+    }
 
     inline std::map<vertex, int> get_color_sets(const vertex_array& vertices)
     {
         auto size = vertices.size();
-        assert(size == num_vertices);
+        assert(size != 0);
         std::map<vertex, int> colors;
 
         for (const auto& vertex : vertices)
@@ -107,6 +152,23 @@ namespace
         }
         return std::make_tuple(index_of_most_violated, weight_of_most_violated);
     }
+
+    inline std::vector<vertex_array> find_all_disconnected(const vertex_array& vertices)
+    {
+        std::vector<vertex_array> out{};
+        for (const auto& curr_vertex : vertices)
+        {
+            for (int i = 0, size = vertices.size(); i < size; ++i)
+            {
+                if (curr_vertex != vertices[i] && adjacency_matrix[curr_vertex][vertices[i]] == 0)
+                {
+                    out.emplace_back(vertex_array({curr_vertex, vertices[i]}));
+                }
+            }
+        }
+        return out;
+    }
+
     /* heuristic-related */
 
 
@@ -243,7 +305,7 @@ namespace
         model.add(get_cplex_objective());
         model.add(constraints);
 
-        get_cplex_algo().setOut(get_cplex_env().getNullStream());
+//        get_cplex_algo().setOut(get_cplex_env().getNullStream());
     }
 
     std::tuple<std::vector<IloNum>, int> get_noninteger_values(const IloNumArray& values)
@@ -294,6 +356,9 @@ namespace
     int max_clique_size = 0;
     IloIntArray max_clique_values(get_cplex_env());
 
+    bool branch_and_bound();
+    bool branch_and_cut();
+
     /**
      * @brief BnB main function to execute branching logic to find integer solution
      *
@@ -319,8 +384,8 @@ namespace
 
         // if non-integer solution is worse than current best - return immediately
         auto current_obj_val = static_cast<int>(cplex.getObjValue());
-//        if (max_clique_size >= current_obj_val) // no idea about correct upper bound for this method
-//            return false;
+        if (max_clique_size >= current_obj_val) // no idea about correct upper bound for this method
+            return false;
 
         auto& env = get_cplex_env();
         IloNumArray vals(env);
@@ -348,8 +413,35 @@ namespace
         }
         else
         {
+            auto intValues = vals.toIntArray();
+            vertex_array vertices_to_check{};
+            for (int i = 0; i < num_vertices; i++)
+            {
+                if (intValues[i] == 1)
+                {
+                    vertices_to_check.emplace_back(i);
+                }
+            }
+            auto disconnected = find_all_disconnected(vertices_to_check);
+            if (!disconnected.empty()) // not a real clique
+            {
+                auto& vars = get_X();
+                IloConstraintArray constraints(env);
+                for (const auto& vertex_pair : disconnected)
+                {
+                    IloExpr expr(env);
+                    for (const auto& vertex : vertex_pair)
+                    {
+                        expr += vars[vertex];
+                    }
+                    constraints.add(IloConstraint(expr <= 1.0));
+                }
+                get_cplex_model().add(constraints);
+                return branch_and_cut();
+            }
+
             max_clique_size = current_obj_val;
-            max_clique_values = vals.toIntArray();
+            max_clique_values = intValues;
             if (max_clique_size == global_ub)
                 return true; // helps to reduce unnecessary calculations
         }
@@ -378,7 +470,7 @@ namespace
 
         auto result = get_nonzero_values(vals);
         auto& vertex_indices = std::get<0>(result); // vertices
-        auto color_sets = get_color_sets(vertex_indices);
+        auto color_sets = get_color_sets_in_range(vertex_indices);
         auto colors_num = std::max_element(color_sets.begin(), color_sets.end(),
                                            [](const auto& p1, const auto& p2)
         {
@@ -386,7 +478,7 @@ namespace
         })->second;
 
         auto independent_sets = get_independent_sets(color_sets, colors_num);
-        if (independent_sets.empty()) // heuristic failed
+        if (independent_sets.empty()) // heuristic found nothing
         {
             return branch_and_bound();
         }
@@ -398,7 +490,7 @@ namespace
         if (index_of_violated_set < 0 || most_violated_set_weight <= 1.0) // nothing found
         {
             // something like that is expected:
-//            return branch_and_bound();
+            return branch_and_bound();
         }
 
 
