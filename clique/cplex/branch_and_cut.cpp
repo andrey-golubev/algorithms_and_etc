@@ -27,23 +27,26 @@ namespace
 
 
     /* heuristic-related */
-    inline vertex_array get_connected(vertex v, vertex start_index = 0)
+    inline vertex_array get_connected(vertex v)
     {
         const auto& row = adjacency_matrix[v];
         vertex_array C = {};
-        for (vertex i = start_index; i < num_vertices; ++i)
+        for (vertex i = 0; i < num_vertices; ++i)
         {
             if (row[i] > 0) { C.push_back(i); }
         }
         return C;
     }
-    inline vertex_array get_connected(vertex v, const vertex_array& vertices, vertex start_index = 0)
+    inline vertex_array get_connected(vertex v, const vertex_array& vertices)
     {
         const auto& row = adjacency_matrix[v];
         vertex_array C = {};
-        for (vertex i = start_index; i < num_vertices; ++i)
+        for (const auto& other_v : vertices)
         {
-            if (row[i] > 0 && std::find(vertices.cbegin(), vertices.cend(), i) != vertices.cend()) { C.push_back(i); }
+            if (v != other_v && row[other_v] > 0)
+            {
+                C.push_back(other_v);
+            }
         }
         return C;
     }
@@ -156,13 +159,15 @@ namespace
     inline std::vector<vertex_array> find_all_disconnected(const vertex_array& vertices)
     {
         std::vector<vertex_array> out{};
-        for (const auto& curr_vertex : vertices)
+
+        int size = vertices.size();
+        for (int i = 0; i < size; ++i)
         {
-            for (int i = 0, size = vertices.size(); i < size; ++i)
+            for (int j = i + 1; j < size; ++j)
             {
-                if (curr_vertex != vertices[i] && adjacency_matrix[curr_vertex][vertices[i]] == 0)
+                if (vertices[i] != vertices[j] && adjacency_matrix[vertices[i]][vertices[j]] == 0)
                 {
-                    out.emplace_back(vertex_array({curr_vertex, vertices[i]}));
+                    out.emplace_back(vertex_array({vertices[i], vertices[j]}));
                 }
             }
         }
@@ -188,7 +193,7 @@ namespace
     }
 
     template<typename T>
-    inline bool is_almost_equal(T a, T b, int units_in_last_place = 2)
+    inline bool are_equal(T a, T b, int units_in_last_place = 2)
     {
         return std::abs(a - b) <= std::numeric_limits<T>::epsilon()
                                   * std::max(std::abs(a), std::abs(b))
@@ -226,7 +231,7 @@ namespace
         assert(vertices.getSize() == num_vertices);
         for (int i = 0; i < num_vertices; i++)
         {
-            if (is_almost_equal(vertices[i], 1.0))
+            if (are_equal(vertices[i], 1.0))
             {
                 s.append(std::to_string(i + 1));
                 s.append(" ");
@@ -267,6 +272,20 @@ namespace
         return obj_function;
     }
 
+    static std::string status_to_string(IloAlgorithm::Status sts)
+    {
+        switch (sts)
+        {
+        case IloAlgorithm::Status::Unknown: return std::string("Unknown");
+        case IloAlgorithm::Status::Feasible: return std::string("Feasible");
+        case IloAlgorithm::Status::Optimal: return std::string("Optimal");
+        case IloAlgorithm::Status::Infeasible: return std::string("Infeasible");
+        case IloAlgorithm::Status::Unbounded: return std::string("Unbounded");
+        case IloAlgorithm::Status::InfeasibleOrUnbounded: return std::string("InfeasibleOrUnbounded");
+        case IloAlgorithm::Status::Error: return std::string("Error");
+        }
+    }
+
     void set_up_cplex(const vertex_matrix& adj_m, const std::map<vertex, int>& color_sets = {}, int colors_num = 0)
     {
         auto& obj_function = get_cplex_objective();
@@ -305,7 +324,7 @@ namespace
         model.add(get_cplex_objective());
         model.add(constraints);
 
-//        get_cplex_algo().setOut(get_cplex_env().getNullStream());
+        get_cplex_algo().setOut(get_cplex_env().getNullStream());
     }
 
     std::tuple<std::vector<IloNum>, int> get_noninteger_values(const IloNumArray& values)
@@ -317,7 +336,7 @@ namespace
         for (int i = 0; i < num_vertices; i++)
         {
             const IloNum& value = values[i];
-            if (!is_almost_equal(value, 0.0) && !is_almost_equal(value, 1.0))
+            if (!are_equal(value, 0.0) && !are_equal(value, 1.0))
             {
                 out.emplace_back(value);
                 if (value > max)
@@ -339,7 +358,7 @@ namespace
         for (int i = 0; i < num_vertices; i++)
         {
             const IloNum& value = values[i];
-            if (!is_almost_equal(value, 0.0))
+            if (!are_equal(value, 0.0))
             {
                 indices.emplace_back(i);
                 weights.emplace_back(value);
@@ -367,12 +386,12 @@ namespace
      * @return true                 Solution that equals global UB is found
      * @return false                Otherwise
      */
-    bool branch_and_bound() try
+    bool branch_and_bound() try // TODO: store integer constrains somewhere and delete them when going into branch_and_cut
     {
         auto& cplex = get_cplex_algo();
         if (!cplex.solve())
         {
-            ERROR_OUT("IloCplex::solve() failed");
+            ERROR_OUT("IloCplex::solve() failed with staus: " << status_to_string(cplex.getStatus()));
             std::exit(EXIT_FAILURE);
         }
 
@@ -384,8 +403,8 @@ namespace
 
         // if non-integer solution is worse than current best - return immediately
         auto current_obj_val = static_cast<int>(cplex.getObjValue());
-        if (max_clique_size >= current_obj_val) // no idea about correct upper bound for this method
-            return false;
+//        if (max_clique_size >= current_obj_val) // TODO: no idea about correct upper bound for branch-and-cut
+//            return false;
 
         auto& env = get_cplex_env();
         IloNumArray vals(env);
@@ -396,8 +415,8 @@ namespace
         {
             auto index_to_branch = std::get<1>(result);
             IloExpr expr(env);
-            auto& array_of_X = get_X();
-            expr += array_of_X[index_to_branch];
+            auto& vars = get_X();
+            expr += vars[index_to_branch];
             IloConstraint c1(expr >= 1.0);
             auto& model = get_cplex_model();
             model.add(c1);
@@ -413,11 +432,10 @@ namespace
         }
         else
         {
-            auto intValues = vals.toIntArray();
             vertex_array vertices_to_check{};
             for (int i = 0; i < num_vertices; i++)
             {
-                if (intValues[i] == 1)
+                if (are_equal(vals[i], 1.0))
                 {
                     vertices_to_check.emplace_back(i);
                 }
@@ -437,11 +455,12 @@ namespace
                     constraints.add(IloConstraint(expr <= 1.0));
                 }
                 get_cplex_model().add(constraints);
+                auto& model = get_cplex_model();
                 return branch_and_cut();
             }
 
             max_clique_size = current_obj_val;
-            max_clique_values = intValues;
+            max_clique_values = vals.toIntArray();
             if (max_clique_size == global_ub)
                 return true; // helps to reduce unnecessary calculations
         }
@@ -493,7 +512,6 @@ namespace
             return branch_and_bound();
         }
 
-
         // adding new constraint
         auto& vars = get_X();
         IloExpr expr(env);
@@ -520,7 +538,7 @@ int main(int argc, char* argv[]) try
         return 1;
     }
     time_limit = std::atof(argv[2]); // in seconds
-    if (time_limit == 0)
+    if (time_limit <= 0)
     {
         ERROR_OUT("Time limit is incorrect");
         return 1;

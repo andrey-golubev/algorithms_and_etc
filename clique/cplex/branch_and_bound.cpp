@@ -95,7 +95,7 @@ namespace
     }
 
     template<typename T>
-    bool is_almost_equal(T a, T b, int units_in_last_place = 2)
+    bool are_equal(T a, T b, int units_in_last_place = 2)
     {
         return std::abs(a - b) <= std::numeric_limits<T>::epsilon()
                                   * std::max(std::abs(a), std::abs(b))
@@ -126,7 +126,7 @@ namespace
         assert(vertices.getSize() == num_vertices);
         for (int i = 0; i < num_vertices; i++)
         {
-            if (is_almost_equal(vertices[i], 1.0))
+            if (are_equal(vertices[i], 1.0))
             {
                 s.append(std::to_string(i + 1));
                 s.append(" ");
@@ -226,7 +226,7 @@ namespace
         for (int i = 0; i < num_vertices; i++)
         {
             const IloNum& value = values[i];
-            if (!is_almost_equal(value, 0.0) && !is_almost_equal(value, 1.0))
+            if (!are_equal(value, 0.0) && !are_equal(value, 1.0))
             {
                 out.emplace_back(value);
                 if (value > max)
