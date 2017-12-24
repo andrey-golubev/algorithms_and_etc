@@ -3,6 +3,14 @@ import os
 import csv
 from enum import Enum
 
+def boolChecker(value):
+    if value is None:
+        return False
+    value = str(value).lower()
+    if value is "yes" or value is "true" or value is "1":
+        return True
+    return False
+
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument('-binary_exe', default='mlp',
                     help='Binary file that will be executed')
@@ -12,7 +20,7 @@ parser.add_argument('-time_limit',
                     help='Integer value in [seconds] specifying time to wait for each run to finish')
 parser.add_argument('-out_csv_file', default='mcp_res.csv',
                     help='File path which run results will be saved to')
-parser.add_argument('-print_sln', default=False,
+parser.add_argument('-print_sln', default=True, #type=boolChecker,
                     help='Bool flag to specify if solution will be printed on screen')
 
 if __name__ == "__main__":

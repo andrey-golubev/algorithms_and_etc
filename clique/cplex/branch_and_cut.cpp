@@ -8,6 +8,7 @@ using namespace std;
 #include <sstream>
 #include <cstdint>
 #include <vector>
+#include <list>
 #include <chrono>
 #include <limits>
 #include <algorithm>
@@ -201,12 +202,12 @@ namespace
                || std::abs(a - b) < std::numeric_limits<T>::min(); // subnormal result
     }
 
+    static constexpr char constraints_file[] = "constraints.log";
     #define ERROR_OUT(msg) std::cerr << "---\n" << msg << "\n---" << std::endl;
     #define ILOEXCEPTION_CATCH() \
     catch (const IloException& e) \
     { \
-        std::string msg(e.getMessage()); \
-        ERROR_OUT(msg); \
+        ERROR_OUT(e.getMessage()); \
         std::exit(EXIT_FAILURE); \
     }
 
@@ -286,6 +287,20 @@ namespace
         }
     }
 
+    static void print_constraints()
+    {
+        std::ofstream file(constraints_file);
+        auto& model = get_cplex_model();
+        for (IloModel::Iterator it(model); it.ok(); ++it)
+        {
+            IloExtractable e = *it;
+            if (e.isConstraint())
+            {
+                file << e << std::endl;
+            }
+        }
+    }
+
     void set_up_cplex(const vertex_matrix& adj_m, const std::map<vertex, int>& color_sets = {}, int colors_num = 0)
     {
         auto& obj_function = get_cplex_objective();
@@ -308,18 +323,6 @@ namespace
             }
             constraints.add(IloConstraint(expr <= 1.0));
         }
-//        for (int row_num = 0, size = adj_m.size(); row_num < size; ++row_num)
-//        {
-//            for (int i = 0; i < num_vertices; ++i)
-//            {
-//                if (row_num != i && adj_m[row_num][i] == 0)
-//                {
-//                    IloExpr expr(env);
-//                    expr += vars[row_num] + vars[i];
-//                    constraints.add(IloConstraint(expr <= 1.0));
-//                }
-//            }
-//        }
         auto& model = get_cplex_model();
         model.add(get_cplex_objective());
         model.add(constraints);
@@ -373,7 +376,7 @@ namespace
 
     // optimal solution will be stored in these variables:
     int max_clique_size = 0;
-    IloIntArray max_clique_values(get_cplex_env());
+    IloNumArray max_clique_values(get_cplex_env());
 
     bool branch_and_bound();
     bool branch_and_cut();
@@ -391,7 +394,13 @@ namespace
         auto& cplex = get_cplex_algo();
         if (!cplex.solve())
         {
-            ERROR_OUT("IloCplex::solve() failed with staus: " << status_to_string(cplex.getStatus()));
+            auto sts = cplex.getStatus();
+            if (sts == IloAlgorithm::Status::Infeasible) // infeasible means that there are such constraints that couldn't co-exist. such branch should be dropped
+            {
+                return false;
+            }
+            ERROR_OUT("IloCplex::solve() failed with staus: " << status_to_string(sts) << std::endl << "constraints would be written into: " << constraints_file);
+            print_constraints();
             std::exit(EXIT_FAILURE);
         }
 
@@ -403,8 +412,8 @@ namespace
 
         // if non-integer solution is worse than current best - return immediately
         auto current_obj_val = static_cast<int>(cplex.getObjValue());
-//        if (max_clique_size >= current_obj_val) // TODO: no idea about correct upper bound for branch-and-cut
-//            return false;
+        if (max_clique_size >= current_obj_val) // TODO: no idea about correct upper bound for branch-and-cut
+            return false;
 
         auto& env = get_cplex_env();
         IloNumArray vals(env);
@@ -413,12 +422,12 @@ namespace
         auto nonInts = std::get<0>(result);
         if (!nonInts.empty())
         {
+            auto& model = get_cplex_model();
             auto index_to_branch = std::get<1>(result);
             IloExpr expr(env);
             auto& vars = get_X();
             expr += vars[index_to_branch];
             IloConstraint c1(expr >= 1.0);
-            auto& model = get_cplex_model();
             model.add(c1);
             if (branch_and_bound())
                 return true;
@@ -455,12 +464,16 @@ namespace
                     constraints.add(IloConstraint(expr <= 1.0));
                 }
                 get_cplex_model().add(constraints);
-                auto& model = get_cplex_model();
-                return branch_and_cut();
+                branch_and_cut();
+                return false;
+//                return branch_and_cut();
             }
 
+            if (max_clique_size >= current_obj_val)
+                return false;
+
             max_clique_size = current_obj_val;
-            max_clique_values = vals.toIntArray();
+            max_clique_values = vals;
             if (max_clique_size == global_ub)
                 return true; // helps to reduce unnecessary calculations
         }
@@ -473,9 +486,20 @@ namespace
         auto& cplex = get_cplex_algo();
         if (!cplex.solve())
         {
-            ERROR_OUT("IloCplex::solve() failed");
+            auto sts = cplex.getStatus();
+            if (sts == IloAlgorithm::Status::Infeasible) // infeasible means that there are such constraints that couldn't co-exist. such branch should be dropped
+            {
+                return false;
+            }
+            ERROR_OUT("IloCplex::solve() failed with staus: " << status_to_string(sts) << std::endl << "constraints would be written into: " << constraints_file);
+            print_constraints();
             std::exit(EXIT_FAILURE);
         }
+
+        // if non-integer solution is worse than current best - return immediately
+        auto current_obj_val = static_cast<int>(cplex.getObjValue());
+        if (max_clique_size >= current_obj_val) // TODO: no idea about correct upper bound for branch-and-cut
+            return false;
 
         auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
         if (elapsed.count() > time_limit)
