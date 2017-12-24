@@ -126,7 +126,7 @@ namespace
         return colors;
     }
 
-    inline std::vector<vertex_array> get_independent_sets(const std::map<vertex, int>& color_sets = {}, int colors_num = 0)
+    inline std::vector<vertex_array> get_independent_sets_internal(const std::map<vertex, int>& color_sets = {}, int colors_num = 0)
     {
         assert(colors_num != 0);
         std::vector<vertex_array> independent_sets(colors_num, vertex_array{});
@@ -136,6 +136,17 @@ namespace
             independent_sets[vertex_color_pair.second-1].emplace_back(vertex_color_pair.first);
         }
         return independent_sets;
+    }
+
+    inline std::vector<vertex_array> get_independent_sets(const vertex_array& vertices)
+    {
+        auto color_sets = get_color_sets_in_range(vertices);
+        auto colors_num = std::max_element(color_sets.begin(), color_sets.end(),
+                                           [](const auto& p1, const auto& p2)
+        {
+            return p1.second < p2.second;
+        })->second;
+        return get_independent_sets_internal(color_sets, colors_num);
     }
 
     // tuple of (index of violated set, "weight" of violated set)
@@ -174,7 +185,6 @@ namespace
         }
         return out;
     }
-
     /* heuristic-related */
 
 
@@ -200,6 +210,12 @@ namespace
                                   * std::max(std::abs(a), std::abs(b))
                                   * units_in_last_place
                || std::abs(a - b) < std::numeric_limits<T>::min(); // subnormal result
+    }
+
+    template<typename T>
+    inline bool are_almost_equal(T a, T b, T epsilon)
+    {
+        return are_equal(std::abs(a - b), epsilon);
     }
 
     static constexpr char constraints_file[] = "constraints.log";
@@ -241,6 +257,15 @@ namespace
         return s;
     }
 
+    inline void throw_on_timeout() noexcept(false)
+    {
+        auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
+        if (elapsed.count() > time_limit)
+        {
+            throw std::runtime_error("Out of time");
+        }
+    }
+
     static inline IloEnv& get_cplex_env()
     {
         static IloEnv cplex_env;
@@ -263,7 +288,6 @@ namespace
     static inline IloCplex& get_cplex_algo()
     {
         static IloCplex cplex_algo(get_cplex_model());
-        cplex_algo.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Concurrent);
         return cplex_algo;
     }
 
@@ -313,7 +337,7 @@ namespace
         auto& env = get_cplex_env();
         IloConstraintArray constraints(env);
 
-        auto independent_sets = get_independent_sets(color_sets, colors_num);
+        auto independent_sets = get_independent_sets_internal(color_sets, colors_num);
         for (const auto& set : independent_sets)
         {
             IloExpr expr(env);
@@ -323,11 +347,28 @@ namespace
             }
             constraints.add(IloConstraint(expr <= 1.0));
         }
-        auto& model = get_cplex_model();
-        model.add(get_cplex_objective());
-        model.add(constraints);
+        get_cplex_model().add(get_cplex_objective());
+        get_cplex_model().add(constraints);
 
+        get_cplex_algo().setParam(IloCplex::Param::RootAlgorithm, IloCplex::Concurrent);
         get_cplex_algo().setOut(get_cplex_env().getNullStream());
+    }
+
+    bool solve_cplex()
+    {
+        auto& cplex = get_cplex_algo();
+        if (!cplex.solve())
+        {
+            auto sts = cplex.getStatus();
+            if (sts == IloAlgorithm::Status::Infeasible) // infeasible means that there are such constraints that couldn't co-exist. such branch should be dropped
+            {
+                return false;
+            }
+            ERROR_OUT("IloCplex::solve() failed with staus: " << status_to_string(sts) << std::endl << "constraints would be written into: " << constraints_file);
+            print_constraints();
+            std::exit(EXIT_FAILURE);
+        }
+        return true;
     }
 
     std::tuple<std::vector<IloNum>, int> get_noninteger_values(const IloNumArray& values)
@@ -391,24 +432,12 @@ namespace
      */
     bool branch_and_bound() try // TODO: store integer constrains somewhere and delete them when going into branch_and_cut
     {
-        auto& cplex = get_cplex_algo();
-        if (!cplex.solve())
-        {
-            auto sts = cplex.getStatus();
-            if (sts == IloAlgorithm::Status::Infeasible) // infeasible means that there are such constraints that couldn't co-exist. such branch should be dropped
-            {
-                return false;
-            }
-            ERROR_OUT("IloCplex::solve() failed with staus: " << status_to_string(sts) << std::endl << "constraints would be written into: " << constraints_file);
-            print_constraints();
-            std::exit(EXIT_FAILURE);
-        }
+        if (!solve_cplex())
+            return false;
 
-        auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
-        if (elapsed.count() > time_limit)
-        {
-            throw std::runtime_error("Out of time");
-        }
+        throw_on_timeout();
+
+        auto& cplex = get_cplex_algo();
 
         // if non-integer solution is worse than current best - return immediately
         auto current_obj_val = static_cast<int>(cplex.getObjValue());
@@ -483,44 +512,23 @@ namespace
 
     bool branch_and_cut() try
     {
-        auto& cplex = get_cplex_algo();
-        if (!cplex.solve())
-        {
-            auto sts = cplex.getStatus();
-            if (sts == IloAlgorithm::Status::Infeasible) // infeasible means that there are such constraints that couldn't co-exist. such branch should be dropped
-            {
-                return false;
-            }
-            ERROR_OUT("IloCplex::solve() failed with staus: " << status_to_string(sts) << std::endl << "constraints would be written into: " << constraints_file);
-            print_constraints();
-            std::exit(EXIT_FAILURE);
-        }
+        if (!solve_cplex())
+            return false;
 
+        auto& cplex = get_cplex_algo();
         // if non-integer solution is worse than current best - return immediately
         auto current_obj_val = static_cast<int>(cplex.getObjValue());
         if (max_clique_size >= current_obj_val) // TODO: no idea about correct upper bound for branch-and-cut
             return false;
 
-        auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
-        if (elapsed.count() > time_limit)
-        {
-            throw std::runtime_error("Out of time");
-        }
+        throw_on_timeout();
 
         auto& env = get_cplex_env();
         IloNumArray vals(env);
         cplex.getValues(vals, get_X());
 
         auto result = get_nonzero_values(vals);
-        auto& vertex_indices = std::get<0>(result); // vertices
-        auto color_sets = get_color_sets_in_range(vertex_indices);
-        auto colors_num = std::max_element(color_sets.begin(), color_sets.end(),
-                                           [](const auto& p1, const auto& p2)
-        {
-            return p1.second < p2.second;
-        })->second;
-
-        auto independent_sets = get_independent_sets(color_sets, colors_num);
+        auto independent_sets = get_independent_sets(std::get<0>(result));
         if (independent_sets.empty()) // heuristic found nothing
         {
             return branch_and_bound();
@@ -546,6 +554,143 @@ namespace
         get_cplex_model().add(IloConstraint(expr <= 1.0));
         return branch_and_cut();
     } ILOEXCEPTION_CATCH()
+
+
+    bool real_branch_and_cut(bool need_to_add_cuts) try
+    {
+        if (!solve_cplex())
+            return false;
+
+        auto& cplex = get_cplex_algo();
+
+        // if non-integer solution is worse than current best - return immediately
+        auto current_obj_val = static_cast<int>(cplex.getObjValue());
+        if (max_clique_size >= current_obj_val) // TODO: no idea about correct upper bound for branch-and-cut
+            return false;
+
+        throw_on_timeout();
+
+        auto& env = get_cplex_env();
+        auto& model = get_cplex_model();
+
+        int add_cut_counter = 0;
+        int objective_nonchanges_counter = 0;
+
+        // adding cuts part:
+        while(need_to_add_cuts) // loop until no violations found or heuristic fails
+        {
+            IloNumArray intermediate_vals(env);
+            cplex.getValues(intermediate_vals, get_X());
+            auto result = get_nonzero_values(intermediate_vals);
+            auto independent_sets = get_independent_sets(std::get<0>(result));
+            if (independent_sets.empty()) // heuristic found no independent sets
+            {
+                break; // go to branching
+            }
+
+            auto& weights = std::get<1>(result); // weights
+            auto mv_result = most_violated(independent_sets, weights);
+            auto index_of_violated_set = std::get<0>(mv_result);
+            auto most_violated_set_weight = std::get<1>(mv_result);
+            if (index_of_violated_set < 0 || most_violated_set_weight <= 1.0) // none violated constraints found
+            {
+                break; // go to branching
+            }
+
+            auto prev_obj_val = cplex.getObjValue();
+
+            // adding new constraint:
+            auto& vars = get_X();
+            IloExpr expr(env);
+            for (const auto& vertex : independent_sets[index_of_violated_set])
+            {
+                expr += vars[vertex];
+            }
+            model.add(IloConstraint(expr <= 1.0));
+            if (!solve_cplex()) // solve with newly added constraint - return to the beginning of the loop
+                return false;
+
+            add_cut_counter++;
+            if (add_cut_counter >= num_vertices * 2 / 3)
+            {
+                // probably spent too much time on adding constraints
+                // added order of num_vertices amount of constraints - force branching
+                break;
+            }
+
+            if (are_almost_equal(prev_obj_val, cplex.getObjValue(), 0.01))
+            {
+                objective_nonchanges_counter++;
+            }
+            if (objective_nonchanges_counter >= 3)
+            {
+                break; // go to branch. objective value didn't change for long enough
+            }
+
+        }
+
+        // branching part:
+        throw_on_timeout();
+
+        // ! cplex already solved the problem
+        IloNumArray vals(env);
+        cplex.getValues(vals, get_X());
+        auto result = get_noninteger_values(vals);
+        auto nonInts = std::get<0>(result);
+        if (!nonInts.empty())
+        {
+            auto& model = get_cplex_model();
+            auto index_to_branch = std::get<1>(result);
+            IloExpr expr(env);
+            auto& vars = get_X();
+            expr += vars[index_to_branch];
+            IloConstraint c1(expr >= 1.0);
+            model.add(c1);
+            if (real_branch_and_cut(false)) // branching part
+                return true;
+            model.remove(c1);
+
+            IloConstraint c2(expr <= 0.0);
+            model.add(c2);
+            if (real_branch_and_cut(false)) // branching part
+                return true;
+            model.remove(c2);
+        }
+        else
+        {
+            vertex_array vertices_to_check{};
+            for (int i = 0; i < num_vertices; i++)
+            {
+                if (are_equal(vals[i], 1.0))
+                {
+                    vertices_to_check.emplace_back(i);
+                }
+            }
+            auto disconnected = find_all_disconnected(vertices_to_check);
+            if (!disconnected.empty()) // not a real clique
+            {
+                auto& vars = get_X();
+                IloConstraintArray constraints(env);
+                for (const auto& pair : disconnected) // consider to add only the best suitable constraint
+                {
+                    constraints.add(IloRange(env, vars[pair[0]] +  vars[pair[1]], 1.0));
+                }
+                get_cplex_model().add(constraints);
+                return real_branch_and_cut(true);
+            }
+
+            // found a clique:
+            if (max_clique_size >= current_obj_val)
+                return false;
+            max_clique_size = current_obj_val;
+            max_clique_values = vals;
+            if (max_clique_size == global_ub)
+                return true; // helps to reduce unnecessary calculations
+        }
+
+        return false;
+    } ILOEXCEPTION_CATCH()
+
 }
 
 int main(int argc, char* argv[]) try
@@ -614,8 +759,9 @@ int main(int argc, char* argv[]) try
     }
     global_ub = static_cast<int>(cplex.getObjValue());
     if (global_ub > colors_num) global_ub = colors_num; // better upper-bound
+//    branch_and_cut();
+    real_branch_and_cut(true);
 
-    branch_and_cut();
     auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
     std::cout << elapsed.count() << " " << static_cast<int>(max_clique_size) << " " << pretty_print(max_clique_values) << std::endl;
     return 0;
