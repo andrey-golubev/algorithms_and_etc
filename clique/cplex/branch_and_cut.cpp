@@ -429,6 +429,7 @@ namespace
     // optimal solution will be stored in these variables:
     int max_clique_size = 0;
     IloNumArray max_clique_values(get_cplex_env());
+    std::string graph_file_name;
 
     bool branch_and_bound();
     bool branch_and_cut();
@@ -566,9 +567,9 @@ namespace
         return branch_and_cut();
     } ILOEXCEPTION_CATCH()
 
-#define TO_DEBUG 1 // TODO: debug wtf is happening
+#define TO_DEBUG 0 // TODO: debug wtf is happening
 
-    bool real_branch_and_cut(bool need_to_add_cuts) try
+    bool real_branch_and_cut() try
     {
         if (!solve_cplex())
             return false;
@@ -627,7 +628,7 @@ namespace
                 return false;
 
             add_cut_counter++;
-            if (add_cut_counter >= num_vertices * 2 / 3)
+            if (add_cut_counter >= num_vertices)// * 2 / 3)
             {
                 // probably spent too much time on adding constraints
                 // added order of num_vertices amount of constraints - force branching
@@ -638,7 +639,7 @@ namespace
             {
                 objective_nonchanges_counter++;
             }
-            if (objective_nonchanges_counter >= 3)
+            if (objective_nonchanges_counter >= 7)
             {
                 break; // go to branch. objective value didn't change for long enough
             }
@@ -661,13 +662,13 @@ namespace
             expr += vars[index_to_branch];
             IloConstraint c1(expr >= 1.0);
             model.add(c1);
-            if (real_branch_and_cut(false)) // branching part
+            if (real_branch_and_cut()) // branching part
                 return true;
             model.remove(c1);
 
             IloConstraint c2(expr <= 0.0);
             model.add(c2);
-            if (real_branch_and_cut(false)) // branching part
+            if (real_branch_and_cut()) // branching part
                 return true;
             model.remove(c2);
         }
@@ -680,7 +681,7 @@ namespace
             for (int i = 0; i < num_vertices; i++)
             {
 #if TO_DEBUG == 1
-                all_vertices[i] = i;
+                all_vertices[i] = vals[i];
 #endif
                 if (are_equal(vals[i], 1.0))
                 {
@@ -701,13 +702,20 @@ namespace
                     constraints.add(IloConstraint(expr <= 1.0));
                 }
                 get_cplex_model().add(constraints);
-                return real_branch_and_cut(true);
+                return real_branch_and_cut();
             }
 
 #if TO_DEBUG != 1
             if (current_obj_val != vertices_to_check.size())
             {
+                static int print_count = 1;
                 print_cplex_objective();
+                std::ofstream stream(std::string("vars_").append(graph_file_name).append(".log"));
+                print_count++;
+                for (int i = 0; i < num_vertices; i++)
+                {
+                    stream << "IloVariable(" << i + 2 << "): " << vals[i] << std::endl;
+                }
             }
 #endif
 
@@ -732,7 +740,8 @@ int main(int argc, char* argv[]) try
         ERROR_OUT("Command-line arguments: <file> <time limit>. Ex: ./mlp graph.clq 1000");
         return 1;
     }
-    std::ifstream f(argv[1]);
+    graph_file_name = std::string(argv[1]);
+    std::ifstream f(graph_file_name);
     if (!f.good())
     {
         ERROR_OUT("File is unreachable/not found");
@@ -791,8 +800,7 @@ int main(int argc, char* argv[]) try
     }
     global_ub = static_cast<int>(cplex.getObjValue());
     if (global_ub > colors_num) global_ub = colors_num; // better upper-bound
-//    branch_and_cut();
-    real_branch_and_cut(true);
+    real_branch_and_cut();
 
     auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
     std::cout << elapsed.count() << " " << static_cast<int>(max_clique_size) << " " << pretty_print(max_clique_values) << std::endl;
