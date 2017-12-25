@@ -245,6 +245,9 @@ namespace
     std::string pretty_print(const IloNumArray& vertices)
     {
         std::string s;
+        if (vertices.getSize() == 0)
+            return s;
+
         assert(vertices.getSize() == num_vertices);
         for (int i = 0; i < num_vertices; i++)
         {
@@ -408,19 +411,16 @@ namespace
     {
         vertex_array indices{};
         indices.reserve(num_vertices);
-        std::vector<IloNum> weights{};
-        weights.reserve(num_vertices);
+        std::vector<IloNum> weights(num_vertices, 0.0);
         for (int i = 0; i < num_vertices; i++)
         {
             const IloNum& value = values[i];
             if (!are_equal(value, 0.0))
             {
                 indices.emplace_back(i);
-                weights.emplace_back(value);
+                weights[i] = value;
             }
         }
-        // by design: weights[i] corresponds to indices[i]
-        assert(weights.size() == indices.size());
         return std::make_tuple(indices, weights);
     }
 
@@ -430,146 +430,9 @@ namespace
     int max_clique_size = 0;
     IloNumArray max_clique_values(get_cplex_env());
     std::string graph_file_name;
-
-    bool branch_and_bound();
-    bool branch_and_cut();
-
-    /**
-     * @brief BnB main function to execute branching logic to find integer solution
-     *
-     * @param[out] objective_value  Function value. Also represents current best value found.
-     * @param[out] optimal_values   Values array. Also represents current best solution.
-     * @return true                 Solution that equals global UB is found
-     * @return false                Otherwise
-     */
-    bool branch_and_bound() try // TODO: store integer constrains somewhere and delete them when going into branch_and_cut
-    {
-        if (!solve_cplex())
-            return false;
-
-        throw_on_timeout();
-
-        auto& cplex = get_cplex_algo();
-
-        // if non-integer solution is worse than current best - return immediately
-        auto current_obj_val = static_cast<int>(cplex.getObjValue());
-        if (max_clique_size >= current_obj_val) // TODO: no idea about correct upper bound for branch-and-cut
-            return false;
-
-        auto& env = get_cplex_env();
-        IloNumArray vals(env);
-        cplex.getValues(vals, get_X());
-        auto result = get_noninteger_values(vals);
-        auto nonInts = std::get<0>(result);
-        if (!nonInts.empty())
-        {
-            auto& model = get_cplex_model();
-            auto index_to_branch = std::get<1>(result);
-            IloExpr expr(env);
-            auto& vars = get_X();
-            expr += vars[index_to_branch];
-            IloConstraint c1(expr >= 1.0);
-            model.add(c1);
-            if (branch_and_bound())
-                return true;
-            model.remove(c1);
-
-            IloConstraint c2(expr <= 0.0);
-            model.add(c2);
-            if (branch_and_bound())
-                return true;
-            model.remove(c2);
-        }
-        else
-        {
-            vertex_array vertices_to_check{};
-            for (int i = 0; i < num_vertices; i++)
-            {
-                if (are_equal(vals[i], 1.0))
-                {
-                    vertices_to_check.emplace_back(i);
-                }
-            }
-            auto disconnected = find_all_disconnected(vertices_to_check);
-            if (!disconnected.empty()) // not a real clique
-            {
-                auto& vars = get_X();
-                IloConstraintArray constraints(env);
-                for (const auto& vertex_pair : disconnected)
-                {
-                    IloExpr expr(env);
-                    for (const auto& vertex : vertex_pair)
-                    {
-                        expr += vars[vertex];
-                    }
-                    constraints.add(IloConstraint(expr <= 1.0));
-                }
-                get_cplex_model().add(constraints);
-                branch_and_cut();
-                return false;
-//                return branch_and_cut();
-            }
-
-            if (max_clique_size >= current_obj_val)
-                return false;
-
-            max_clique_size = current_obj_val;
-            max_clique_values = vals;
-            if (max_clique_size == global_ub)
-                return true; // helps to reduce unnecessary calculations
-        }
-        return false;
-    } ILOEXCEPTION_CATCH()
-
-
-    bool branch_and_cut() try
-    {
-        if (!solve_cplex())
-            return false;
-
-        auto& cplex = get_cplex_algo();
-        // if non-integer solution is worse than current best - return immediately
-        auto current_obj_val = static_cast<int>(cplex.getObjValue());
-        if (max_clique_size >= current_obj_val) // TODO: no idea about correct upper bound for branch-and-cut
-            return false;
-
-        throw_on_timeout();
-
-        auto& env = get_cplex_env();
-        IloNumArray vals(env);
-        cplex.getValues(vals, get_X());
-
-        auto result = get_nonzero_values(vals);
-        auto independent_sets = get_independent_sets(std::get<0>(result));
-        if (independent_sets.empty()) // heuristic found nothing
-        {
-            return branch_and_bound();
-        }
-        auto& weights = std::get<1>(result); // weights
-        auto mv_result = most_violated(independent_sets, weights);
-        auto index_of_violated_set = std::get<0>(mv_result);
-        auto most_violated_set_weight = std::get<1>(mv_result);
-        // what to do next?
-        if (index_of_violated_set < 0 || most_violated_set_weight <= 1.0) // nothing found
-        {
-            // something like that is expected:
-            return branch_and_bound();
-        }
-
-        // adding new constraint
-        auto& vars = get_X();
-        IloExpr expr(env);
-        for (const auto& vertex : independent_sets[index_of_violated_set])
-        {
-            expr += vars[vertex];
-        }
-        get_cplex_model().add(IloConstraint(expr <= 1.0));
-        return branch_and_cut();
-    } ILOEXCEPTION_CATCH()
-
 #define TO_DEBUG 0 // TODO: debug wtf is happening
 
-    bool real_branch_and_cut() try
+    bool branch_and_cut() try
     {
         if (!solve_cplex())
             return false;
@@ -582,6 +445,7 @@ namespace
         auto current_obj_val = static_cast<int>(cplex.getObjValue());
         if (are_equal(obj_val_as_double, double(current_obj_val + 1)))
             current_obj_val++;
+
         if (max_clique_size >= current_obj_val) // TODO: no idea about correct upper bound for branch-and-cut
             return false;
 
@@ -662,13 +526,13 @@ namespace
             expr += vars[index_to_branch];
             IloConstraint c1(expr >= 1.0);
             model.add(c1);
-            if (real_branch_and_cut()) // branching part
+            if (branch_and_cut()) // branching part
                 return true;
             model.remove(c1);
 
             IloConstraint c2(expr <= 0.0);
             model.add(c2);
-            if (real_branch_and_cut()) // branching part
+            if (branch_and_cut()) // branching part
                 return true;
             model.remove(c2);
         }
@@ -702,7 +566,7 @@ namespace
                     constraints.add(IloConstraint(expr <= 1.0));
                 }
                 get_cplex_model().add(constraints);
-                return real_branch_and_cut();
+                return branch_and_cut();
             }
 
 #if TO_DEBUG != 1
@@ -800,7 +664,7 @@ int main(int argc, char* argv[]) try
     }
     global_ub = static_cast<int>(cplex.getObjValue());
     if (global_ub > colors_num) global_ub = colors_num; // better upper-bound
-    real_branch_and_cut();
+    branch_and_cut();
 
     auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(_chrono::now() - start_time);
     std::cout << elapsed.count() << " " << static_cast<int>(max_clique_size) << " " << pretty_print(max_clique_values) << std::endl;
