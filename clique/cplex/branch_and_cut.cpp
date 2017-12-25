@@ -311,18 +311,29 @@ namespace
         }
     }
 
-    static void print_constraints()
+    template<typename ConditionCallable, typename T>
+    static void print_cplex(ConditionCallable condition, T file_name)
     {
-        std::ofstream file(constraints_file);
+        std::ofstream stream(file_name);
         auto& model = get_cplex_model();
         for (IloModel::Iterator it(model); it.ok(); ++it)
         {
             IloExtractable e = *it;
-            if (e.isConstraint())
+            if (condition(e))
             {
-                file << e << std::endl;
+                stream << e << std::endl;
             }
         }
+    }
+
+    static void print_cplex_constraints()
+    {
+        print_cplex([] (const IloExtractable& e) { return e.isConstraint(); }, constraints_file);
+    }
+
+    static void print_cplex_objective()
+    {
+        print_cplex([] (const IloExtractable& e) { return e.isObjective(); }, "objective.log");
     }
 
     void set_up_cplex(const vertex_matrix& adj_m, const std::map<vertex, int>& color_sets = {}, int colors_num = 0)
@@ -365,7 +376,7 @@ namespace
                 return false;
             }
             ERROR_OUT("IloCplex::solve() failed with staus: " << status_to_string(sts) << std::endl << "constraints would be written into: " << constraints_file);
-            print_constraints();
+            print_cplex_constraints();
             std::exit(EXIT_FAILURE);
         }
         return true;
@@ -555,6 +566,7 @@ namespace
         return branch_and_cut();
     } ILOEXCEPTION_CATCH()
 
+#define TO_DEBUG 1 // TODO: debug wtf is happening
 
     bool real_branch_and_cut(bool need_to_add_cuts) try
     {
@@ -564,7 +576,11 @@ namespace
         auto& cplex = get_cplex_algo();
 
         // if non-integer solution is worse than current best - return immediately
+        // difficult objective value calculation:
+        auto obj_val_as_double = cplex.getObjValue();
         auto current_obj_val = static_cast<int>(cplex.getObjValue());
+        if (are_equal(obj_val_as_double, double(current_obj_val + 1)))
+            current_obj_val++;
         if (max_clique_size >= current_obj_val) // TODO: no idea about correct upper bound for branch-and-cut
             return false;
 
@@ -577,7 +593,7 @@ namespace
         int objective_nonchanges_counter = 0;
 
         // adding cuts part:
-        while(need_to_add_cuts) // loop until no violations found or heuristic fails
+        while(true) // loop until no violations found or heuristic fails
         {
             IloNumArray intermediate_vals(env);
             cplex.getValues(intermediate_vals, get_X());
@@ -626,7 +642,6 @@ namespace
             {
                 break; // go to branch. objective value didn't change for long enough
             }
-
         }
 
         // branching part:
@@ -658,9 +673,15 @@ namespace
         }
         else
         {
+#if TO_DEBUG == 1
+            vertex_array all_vertices(num_vertices, 0);
+#endif
             vertex_array vertices_to_check{};
             for (int i = 0; i < num_vertices; i++)
             {
+#if TO_DEBUG == 1
+                all_vertices[i] = i;
+#endif
                 if (are_equal(vals[i], 1.0))
                 {
                     vertices_to_check.emplace_back(i);
@@ -673,11 +694,22 @@ namespace
                 IloConstraintArray constraints(env);
                 for (const auto& pair : disconnected) // consider to add only the best suitable constraint
                 {
-                    constraints.add(IloRange(env, vars[pair[0]] +  vars[pair[1]], 1.0));
+                    IloExpr expr(env);
+                    expr += vars[pair[0]];
+                    expr += vars[pair[1]];
+//                    constraints.add(IloRange(env, vars[pair[0]] +  vars[pair[1]], 1.0));
+                    constraints.add(IloConstraint(expr <= 1.0));
                 }
                 get_cplex_model().add(constraints);
                 return real_branch_and_cut(true);
             }
+
+#if TO_DEBUG != 1
+            if (current_obj_val != vertices_to_check.size())
+            {
+                print_cplex_objective();
+            }
+#endif
 
             // found a clique:
             if (max_clique_size >= current_obj_val)
