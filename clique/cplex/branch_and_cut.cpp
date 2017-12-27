@@ -133,7 +133,7 @@ namespace
         for (const auto& vertex_color_pair : color_sets)
         {
             // colors start from 1, not 0:
-            independent_sets[vertex_color_pair.second-1].emplace_back(vertex_color_pair.first);
+            independent_sets[vertex_color_pair.second - 1].emplace_back(vertex_color_pair.first);
         }
         return independent_sets;
     }
@@ -142,7 +142,7 @@ namespace
     {
         auto color_sets = get_color_sets_in_range(vertices);
         auto colors_num = std::max_element(color_sets.begin(), color_sets.end(),
-                                           [](const auto& p1, const auto& p2)
+            [](const auto& p1, const auto& p2)
         {
             return p1.second < p2.second;
         })->second;
@@ -179,7 +179,7 @@ namespace
             {
                 if (vertices[i] != vertices[j] && adjacency_matrix[vertices[i]][vertices[j]] == 0)
                 {
-                    out.emplace_back(vertex_array({vertices[i], vertices[j]}));
+                    out.emplace_back(vertex_array({ vertices[i], vertices[j] }));
                 }
             }
         }
@@ -207,9 +207,9 @@ namespace
     inline bool are_equal(T a, T b, int units_in_last_place = 2)
     {
         return std::abs(a - b) <= std::numeric_limits<T>::epsilon()
-                                  * std::max(std::abs(a), std::abs(b))
-                                  * units_in_last_place
-               || std::abs(a - b) < std::numeric_limits<T>::min(); // subnormal result
+            * std::max(std::abs(a), std::abs(b))
+            * units_in_last_place
+            || std::abs(a - b) < std::numeric_limits<T>::min(); // subnormal result
     }
 
     template<typename T>
@@ -219,8 +219,8 @@ namespace
     }
 
     static constexpr char constraints_file[] = "constraints.log";
-    #define ERROR_OUT(msg) std::cerr << "---\n" << msg << "\n---" << std::endl;
-    #define ILOEXCEPTION_CATCH() \
+#define ERROR_OUT(msg) std::cerr << "---\n" << msg << "\n---" << std::endl;
+#define ILOEXCEPTION_CATCH() \
     catch (const IloException& e) \
     { \
         ERROR_OUT(e.getMessage()); \
@@ -331,12 +331,12 @@ namespace
 
     static void print_cplex_constraints()
     {
-        print_cplex([] (const IloExtractable& e) { return e.isConstraint(); }, constraints_file);
+        print_cplex([](const IloExtractable& e) { return e.isConstraint(); }, constraints_file);
     }
 
     static void print_cplex_objective()
     {
-        print_cplex([] (const IloExtractable& e) { return e.isObjective(); }, "objective.log");
+        print_cplex([](const IloExtractable& e) { return e.isObjective(); }, "objective.log");
     }
 
     void set_up_cplex(const vertex_matrix& adj_m, const std::map<vertex, int>& color_sets = {}, int colors_num = 0)
@@ -430,7 +430,6 @@ namespace
     int max_clique_size = 0;
     IloNumArray max_clique_values(get_cplex_env());
     std::string graph_file_name;
-#define TO_DEBUG 0 // TODO: debug wtf is happening
 
     bool branch_and_cut() try
     {
@@ -458,24 +457,62 @@ namespace
         int objective_nonchanges_counter = 0;
 
         // adding cuts part:
-        while(true) // loop until no violations found or heuristic fails
+        while (true) // loop until no violations found or heuristic fails
         {
             IloNumArray intermediate_vals(env);
             cplex.getValues(intermediate_vals, get_X());
-            auto result = get_nonzero_values(intermediate_vals);
-            auto independent_sets = get_independent_sets(std::get<0>(result));
-            if (independent_sets.empty()) // heuristic found no independent sets
+            std::tuple<vertex_array, std::vector<IloNum>>  result = get_nonzero_values(intermediate_vals); // greedy build of most violated
+            struct Weight
             {
-                break; // go to branching
+                Weight(vertex vert, IloNum weight) : v(vert), w(weight) {}
+                bool operator < (const Weight& str) const
+                {
+                    return (w < str.w);
+                }
+                vertex v;
+                IloNum w;
+            };
+            std::vector<Weight> non_zero_weigts;
+            size_t number_of_non_zero = std::get<0>(result).size();
+            non_zero_weigts.reserve(number_of_non_zero);
+            for (size_t i = 0; i < number_of_non_zero; i++)
+            {
+                non_zero_weigts.emplace_back(std::get<0>(result)[i], std::get<1>(result)[i]);
             }
-
-            auto& weights = std::get<1>(result); // weights
-            auto mv_result = most_violated(independent_sets, weights);
-            auto index_of_violated_set = std::get<0>(mv_result);
-            auto most_violated_set_weight = std::get<1>(mv_result);
-            if (index_of_violated_set < 0 || most_violated_set_weight <= 1.0) // none violated constraints found
+            sort(non_zero_weigts.begin(), non_zero_weigts.end());
+            vertex_array independent_set;
+            independent_set.reserve(number_of_non_zero);
+            for (int k = number_of_non_zero - 1; k >= 1; k--) // try to build a pair of not connected vertisces or more than a pair
             {
-                break; // go to branching
+                independent_set.emplace_back(non_zero_weigts[k].v);
+                for (int i = k - 1; i >= 0; i--)
+                {
+                    bool connected_with_added = 0;
+                    for (const auto & j : independent_set)
+                    {
+                        if (adjacency_matrix[non_zero_weigts[i].v][j] > 0)
+                        {
+                            connected_with_added = 1;
+                            break;
+                        }
+                    }
+                    if (0 == connected_with_added)
+                    {
+                        independent_set.emplace_back(non_zero_weigts[i].v);
+                    }
+                }
+                if (independent_set.size() >= 2)
+                {
+                    break;
+                }
+                else
+                {
+                    independent_set.clear();
+                }
+            }
+            if (independent_set.size() <= 1)
+            {
+                break; // it is possibly clique
             }
 
             auto prev_obj_val = cplex.getObjValue();
@@ -483,7 +520,7 @@ namespace
             // adding new constraint:
             auto& vars = get_X();
             IloExpr expr(env);
-            for (const auto& vertex : independent_sets[index_of_violated_set])
+            for (const auto& vertex : independent_set)
             {
                 expr += vars[vertex];
             }
@@ -538,15 +575,9 @@ namespace
         }
         else
         {
-#if TO_DEBUG == 1
-            vertex_array all_vertices(num_vertices, 0);
-#endif
             vertex_array vertices_to_check{};
             for (int i = 0; i < num_vertices; i++)
             {
-#if TO_DEBUG == 1
-                all_vertices[i] = vals[i];
-#endif
                 if (are_equal(vals[i], 1.0))
                 {
                     vertices_to_check.emplace_back(i);
@@ -562,26 +593,21 @@ namespace
                     IloExpr expr(env);
                     expr += vars[pair[0]];
                     expr += vars[pair[1]];
-//                    constraints.add(IloRange(env, vars[pair[0]] +  vars[pair[1]], 1.0));
                     constraints.add(IloConstraint(expr <= 1.0));
                 }
                 get_cplex_model().add(constraints);
                 return branch_and_cut();
             }
 
-#if TO_DEBUG != 1
             if (current_obj_val != vertices_to_check.size())
             {
-                static int print_count = 1;
                 print_cplex_objective();
                 std::ofstream stream(std::string("vars_").append(graph_file_name).append(".log"));
-                print_count++;
                 for (int i = 0; i < num_vertices; i++)
                 {
                     stream << "IloVariable(" << i + 2 << "): " << vals[i] << std::endl;
                 }
             }
-#endif
 
             // found a clique:
             if (max_clique_size >= current_obj_val)
@@ -634,7 +660,7 @@ int main(int argc, char* argv[]) try
         if (l0.compare("e") == 0) // format: e <vertex1> <vertex2>
         {
             auto v1 = static_cast<vertex>(std::atoi(parsed[1].c_str())) - 1,
-                 v2 = static_cast<vertex>(std::atoi(parsed[2].c_str())) - 1;
+                v2 = static_cast<vertex>(std::atoi(parsed[2].c_str())) - 1;
             adjacency_matrix[v1][v2]++;
             adjacency_matrix[v2][v1]++;
         }
@@ -650,7 +676,7 @@ int main(int argc, char* argv[]) try
 
     auto color_sets = get_color_sets(all_vertices);
     auto colors_num = std::max_element(color_sets.begin(), color_sets.end(),
-                                       [](const auto& p1, const auto& p2)
+        [](const auto& p1, const auto& p2)
     {
         return p1.second < p2.second;
     })->second;
