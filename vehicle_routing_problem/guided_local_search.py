@@ -2,9 +2,11 @@
 
 import argparse
 import sys
+import time
 
 # local imports
 from lib.graph_utils import GraphUtils
+import lib.search_utils as search
 
 
 def parse_args():
@@ -23,24 +25,30 @@ def optimal_start_times(graph):
     return graph
 
 
-def local_search(current, graph, max_iter):
-    """Perform local search"""
-    ref_objective = graph.objective()
-    costs = graph.costs[current]
-    iteration = 0
-    for iteration in range(max_iter):
-        min_idx, min_value = min(enumerate(costs), key=lambda x: x[1])
-        if (graph.objective(exclude=current.id) + min_value) < ref_objective:
-            return min_idx
-    return iteration
+# def local_search(current, graph, max_iter):
+#     """Perform local search"""
+#     ref_objective = graph.objective()
+#     costs = graph.costs[current]
+#     iteration = 0
+#     for iteration in range(max_iter):
+#         min_idx, min_value = min(enumerate(costs), key=lambda x: x[1])
+#         if (graph.objective(exclude=current.id) + min_value) < ref_objective:
+#             return min_idx
+#     return iteration
 
 
 def main():
     """Main entry point"""
     args = parse_args()
-    graph = GraphUtils(args.instance)
-    print(local_search(0, graph, args.ls_max_iter))
-    # print(graph)
+    graph = None
+    with open(args.instance) as instance_file:
+        graph = GraphUtils(instance_file)
+    start = time.time()
+    S = search.construct_initial_solution(graph, ignore_constraints=True)
+    print(S.all_served(graph.customer_number))
+    print('----- PERFORMANCE -----')
+    print('Time for VRP {some} seconds'.format(
+        some=(time.time() - start)))
     return 0
 
 

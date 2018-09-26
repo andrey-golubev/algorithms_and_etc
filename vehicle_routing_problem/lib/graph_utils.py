@@ -19,20 +19,55 @@ def skip_lines(input_file, keyword):
     return input_file
 
 
+class Solution(object):
+    """
+    VRP solution representation
+    """
+
+    def __init__(self, routes):
+        """Init method"""
+        self._routes = routes
+
+    @property
+    def routes(self):
+        """Get all paths"""
+        return self._routes
+
+    def __str__(self):
+        """Serialize solution"""
+        routes = []
+        for route in self.routes:
+            routes.append([c.id for c in route])
+        return routes.__str__()
+
+    def __len__(self):
+        """Return length of solution: number of routes"""
+        return len(self._routes)
+
+    @property
+    def shape(self):
+        """Return number of routes and customers served"""
+        served_customers = set()
+        for route in self.routes:
+            served_customers |= {c.id for c in route}
+        return len(self._routes), len(served_customers)
+
+    def all_served(self, number_of_customers):
+        """Return whether all customers are served"""
+        served_customers = set()
+        for route in self.routes:
+            served_customers |= {c.id for c in route}
+        return len(served_customers) == number_of_customers
+
+
 class CostMap(Matrix):
-    """Cost map between customers"""
+    """
+    Cost map between customers
+    """
+
     def __init__(self, customers):
+        """Init method"""
         super(CostMap, self).__init__(customers, CostMap.calculate_cost)
-
-    def __getitem__(self, key):
-        """Overload for operator[] getter"""
-        return self.matrix[key]  # return row
-
-    def __setitem__(self, key, value):
-        """Overload for operator[] setter"""
-        if not isinstance(value, list) or len(self.matrix[key]) != len(value):
-            raise ValueError
-        self.matrix[key] = value
 
     @staticmethod
     def calculate_cost(a, b):
@@ -40,17 +75,20 @@ class CostMap(Matrix):
 
 
 class GraphUtils(object):
-    """Main class for graph abstraction"""
-    def __init__(self, path):
-        _name, number, cap, input_data = GraphUtils.parse_instance(path)
+    """
+    Main class for graph abstraction
+    """
+
+    def __init__(self, io_stream):
+        """Init method"""
+        _name, number, cap, input_data = GraphUtils.parse_instance(io_stream)
         self.instance_name = _name
         self.v_number = number
         self.vehicle_capacity = cap
         # input data processing:
-        self.customer_num = 0
         # expecting full graph!
         self.cost_map = CostMap(input_data)
-        self.path = []  # customer ids for path
+        self.c_number = len(input_data)
 
     @property
     def name(self):
@@ -71,23 +109,31 @@ class GraphUtils(object):
         """Costs map"""
         return self.cost_map
 
-    def objective(self, exclude=[]):
-        """Calculate objective function"""
-        if not (isinstance(exclude, list)):
-            exclude = [exclude]
-        costs = 0
-        for customer in self.path:
-            if customer.id in exclude:
-                continue
-            costs += self.costs[customer.id]
-        return costs
+    @property
+    def customer_number(self):
+        """Number of customers"""
+        return self.c_number
 
-    def update_path(self, id_before, id_after):
-        """Update path with new node"""
-        for i, e in enumerate(self.path):
-            if e.id == id_before:
-                self.path[i] = self.costs.elements[id_after]
-        return self
+    @property
+    def depot(self):
+        """Return depot"""
+        return self.costs.depot
+
+    @property
+    def customers(self):
+        """Return customers"""
+        return self.costs.customers.keys()
+
+    # def objective(self, exclude=[]):
+    #     """Calculate objective function"""
+    #     if not (isinstance(exclude, list)):
+    #         exclude = [exclude]
+    #     costs = 0
+    #     for customer in self.path:
+    #         if customer.id in exclude:
+    #             continue
+    #         costs += self.costs[customer.id]
+    #     return costs
 
     def __len__(self):
         """Number of customers"""
@@ -104,24 +150,22 @@ costs:
             name=self.instance_name,
             v_num=self.vehicle_number,
             capacity=self.vehicle_capacity,
-            c_num=self.customer_num,
+            c_num=self.customer_number,
             cost_map=[],
             #cost_map=self.cost_map
         )
 
     @staticmethod
-    def parse_instance(instance_path):
+    def parse_instance(io_stream):
         """Parse VRP instance file"""
-        instance_file = open(instance_path, 'r')
-        name = instance_file.readline().strip()
-        instance_file = skip_lines(instance_file, 'VEHICLE')
-        number, capacity = instance_file.readline().strip().split()
-        instance_file = skip_lines(instance_file, 'CUSTOMER')
+        name = io_stream.readline().strip()
+        io_stream = skip_lines(io_stream, 'VEHICLE')
+        number, capacity = io_stream.readline().strip().split()
+        io_stream = skip_lines(io_stream, 'CUSTOMER')
         customer_data = []
-        for customer_str in instance_file.readlines():
+        for customer_str in io_stream.readlines():
             customer_str = customer_str.strip()
             if not customer_str:
                 continue
             customer_data.append(customer_str.split())
-        instance_file.close()
-        return name, number, capacity, customer_data
+        return name, int(number), int(capacity), customer_data
