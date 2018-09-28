@@ -40,11 +40,6 @@ class Solution(object):
         """Init method"""
         self._routes = routes
 
-    @property
-    def routes(self):
-        """Get all paths"""
-        return self._routes
-
     def __str__(self):
         """Serialize solution"""
         routes = []
@@ -52,9 +47,28 @@ class Solution(object):
             routes.append([c.id for c in route])
         return routes.__str__()
 
+    def __getitem__(self, key):
+        """Return route by key(index)"""
+        if not isinstance(key, int):
+            raise ValueError('wrong key type')
+        return self._routes[key]
+
     def __len__(self):
         """Return length of solution: number of routes"""
         return len(self._routes)
+
+    def __eq__(self, other):
+        """Equality operator"""
+        return self.routes == other.routes
+
+    def __ne__(self, other):
+        """Inequality operator"""
+        return self.routes != other.routes
+
+    @property
+    def routes(self):
+        """Get all paths"""
+        return self._routes
 
     @property
     def shape(self):

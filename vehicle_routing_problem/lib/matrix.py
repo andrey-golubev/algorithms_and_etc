@@ -104,7 +104,10 @@ class Matrix(object):
         if isinstance(key, int):  # return customer by index
             return list(self.elements.keys())[key]
         if isinstance(key, list):  # return specific cost per customer
-            return self.elements[key[0]][key[1]]
+            key_0, key_1 = key[0], key[1]
+            if isinstance(key_0, Customer):
+                key_0, key_1 = key_0.id, key_1.id
+            return self.elements[key_0][key_1]
         return self.elements[key]  # return all costs per customer
 
     def __setitem__(self, key, value):

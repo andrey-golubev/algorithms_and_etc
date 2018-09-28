@@ -29,6 +29,7 @@ def import_from(rel_path):
 
 with import_from('../'):
     from lib.graph_utils import Solution
+    from lib.local_search_strategies import two_opt_on_route
 
 
 def construct_initial_solution(graph, ignore_constraints=False):
@@ -64,9 +65,20 @@ def construct_initial_solution(graph, ignore_constraints=False):
     if not ignore_constraints:
         if len(routes) > graph.vehicle_number:
             raise ValueError('initial solution error: vehicle number exceeded')
-        if max([len(path) for path in routes]) > graph.capacity:
-            raise ValueError('initial solution error: capacity exceeded')
+        # TODO: additional constraints
     return Solution(routes=routes)
+
+
+def local_search(graph, solution):
+    """Perform local search"""
+    def two_opt(graph, solution):
+        """Perform 2-opt operation on solution"""
+        routes = [None] * len(solution)
+        for i, route in enumerate(solution):
+            routes[i] = two_opt_on_route(graph, route)
+        return Solution(routes)
+    # TODO: implement "smarter" local search
+    return two_opt(graph, solution)
 
 
 # Unit Tests
@@ -78,7 +90,7 @@ C108_shortened_x10
 
 VEHICLE
 NUMBER     CAPACITY
-3         30
+3         50
 
 CUSTOMER
 CUST NO.   XCOORD.   YCOORD.   DEMAND    READY TIME   DUE DATE   SERVICE TIME
@@ -95,6 +107,8 @@ CUST NO.   XCOORD.   YCOORD.   DEMAND    READY TIME   DUE DATE   SERVICE TIME
     9      38         70         10        429        710         90
 """
 
+    VERBOSE = False
+
     def setUp(self):
         from graph_utils import GraphUtils
         from io import StringIO
@@ -104,7 +118,22 @@ CUST NO.   XCOORD.   YCOORD.   DEMAND    READY TIME   DUE DATE   SERVICE TIME
     def test_construct_initial_solution_works(self):
         try:
             S = construct_initial_solution(self.graph, ignore_constraints=False)
-            print(S)
+            if SearchUtilsTests.VERBOSE:
+                print(S)
+            self.assertTrue(S)
+        except Exception as e:
+            self.fail(str(e))
+
+    def test_local_search_works(self):
+        try:
+            S = construct_initial_solution(self.graph, ignore_constraints=False)
+            S_opt = local_search(self.graph, S)
+            self.assertNotEqual(
+                S, S_opt,
+                msg='{S1} == {S2}'.format(S1=str(S), S2=str(S_opt)))
+            if SearchUtilsTests.VERBOSE:
+                print(S)
+                print(S_opt)
         except Exception as e:
             self.fail(str(e))
 

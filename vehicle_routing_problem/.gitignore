@@ -2,4 +2,4 @@ CMakeLists.txt.user
 .vscode
 _*
 __pycache__
-
+.test_data
