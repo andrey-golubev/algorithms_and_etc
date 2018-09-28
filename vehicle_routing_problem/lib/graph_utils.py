@@ -2,7 +2,19 @@ import math
 from prettytable import PrettyTable
 
 # local imports
-from lib.matrix import Matrix
+from contextlib import contextmanager
+@contextmanager
+def import_from(rel_path):
+    """Add module import relative path to sys.path"""
+    import sys
+    import os
+    cur_dir = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.join(cur_dir, rel_path))
+    yield
+    sys.path.pop(0)
+
+with import_from('../'):
+    from lib.matrix import Matrix
 
 
 def skip_lines(input_file, keyword):

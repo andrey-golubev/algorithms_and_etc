@@ -4,15 +4,32 @@
 Library for local search and initial solution
 """
 
-# 2-opt
-# relocation
+# 1) initial solution
+# 2) 2-opt
+# 3) ? relocation
+# 4) tests
 # input: vector of paths
 # output: new vector of paths
 # can do optional: (found, new vector of paths)
 
 import unittest
 
-from lib.graph_utils import Solution
+# local imports
+from contextlib import contextmanager
+@contextmanager
+def import_from(rel_path):
+    """Add module import relative path to sys.path"""
+    import sys
+    import os
+    cur_dir = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.join(cur_dir, rel_path))
+    yield
+    sys.path.pop(0)
+
+
+with import_from('../'):
+    from lib.graph_utils import Solution
+
 
 def construct_initial_solution(graph, ignore_constraints=False):
     """Construct Initial Solution given a GraphUtils object"""
@@ -27,19 +44,19 @@ def construct_initial_solution(graph, ignore_constraints=False):
             break
         vehicle_route = [depot]
         route_capacity = float(graph.capacity)
-        last_customer = vehicle_route[-1]
-        possible_paths = sorted(
-            [(i, cost) for i, cost in enumerate(graph.costs[last_customer]) if i in non_visited_customers],
-            key=lambda x: x[1])
-        while non_visited_customers and (route_capacity > possible_paths[0][1]):
+        unfulfilled_demands = sorted(
+            [(c.id, c.demand) for c in graph.customers if c in non_visited_customers],
+            key=lambda x: x[1],
+            reverse=True)
+        while non_visited_customers and (route_capacity >= unfulfilled_demands[-1][1]):
             visited = set()
-            for i, cost in possible_paths:
-                if cost > route_capacity:
-                    break
+            for i, demand in unfulfilled_demands:
+                if demand > route_capacity:
+                    continue
                 next_customer = graph.costs[i]
                 visited.add(next_customer)
                 vehicle_route.append(next_customer)
-                route_capacity -= cost
+                route_capacity -= demand
             non_visited_customers -= visited
         vehicle_route.append(depot)
         routes.append(vehicle_route)
@@ -61,7 +78,7 @@ C108_shortened_x10
 
 VEHICLE
 NUMBER     CAPACITY
-3         20
+3         30
 
 CUSTOMER
 CUST NO.   XCOORD.   YCOORD.   DEMAND    READY TIME   DUE DATE   SERVICE TIME

@@ -45,7 +45,7 @@ def main():
         graph = GraphUtils(instance_file)
     start = time.time()
     S = search.construct_initial_solution(graph, ignore_constraints=True)
-    print(S.all_served(graph.customer_number))
+    print('All served?', S.all_served(graph.customer_number))
     print('----- PERFORMANCE -----')
     print('Time for VRP {some} seconds'.format(
         some=(time.time() - start)))
