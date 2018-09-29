@@ -80,16 +80,25 @@ class Solution(object):
 class Objective(ABC):
     """Objective function interface"""
     @abstractmethod
-    def __call__(self, graph, solution, method_specific):
-        """operator() interface"""
+    def __call__(self, graph, solution, md):
+        """
+        operator() interface
+
+        :param graph:
+            Graph object
+        :param solution:
+            Solution object
+        :param md:
+            Specific method supplementary data as a dict (i.e. {'p': penalties})
+        """
         del graph
         del solution
-        del method_specific
+        del md
         return 0
 
 class CostMap(Matrix):
     """
-    Cost map between customers
+    Costs between customers
     """
     def __init__(self, customers):
         """Init method"""
@@ -99,6 +108,15 @@ class CostMap(Matrix):
     def calculate_cost(a, b):
         """Cost function"""
         return math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2)
+
+
+class PenaltyMap(Matrix):
+    """
+    Penalties between customers
+    """
+    def __init__(self, customers):
+        """Init method"""
+        super(PenaltyMap, self).__init__(customers, lambda x, y: 0)
 
 
 def _skip_lines(input_file, keyword):
@@ -127,6 +145,7 @@ class Graph(object):
         self.vehicle_capacity = cap
         # input data processing:
         # expecting full graph!
+        self._input_data = input_data
         self.cost_map = CostMap(input_data)
         self.c_number = len(input_data)
 
@@ -163,6 +182,11 @@ class Graph(object):
     def customers(self):
         """Return customers"""
         return self.costs.customers.keys()
+
+    @property
+    def raw_data(self):
+        """Return raw input data"""
+        return self._input_data
 
     def __len__(self):
         """Number of customers"""

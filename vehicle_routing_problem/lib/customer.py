@@ -113,7 +113,10 @@ class Matrix(object):
     def __setitem__(self, key, value):
         """Overload for operator[] setter"""
         if isinstance(key, list):  # set specific cost for customer
-            self.elements[key[0]][key[1]] = value
+            key_0, key_1 = key[0], key[1]
+            if isinstance(key_0, Customer):
+                key_0, key_1 = key_0.id, key_1.id
+            self.elements[key_0][key_1] = value
         elif len(value) == len(self.elements[key[0]]):
             self.elements[key[0]] = value  # set all costs for customer
         else:

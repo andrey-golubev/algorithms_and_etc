@@ -36,14 +36,14 @@ def _reconstruct(graph, route):
     return [graph.depot] + route + [graph.depot]
 
 
-def _two_opt_on_route(graph, objective, solution, route_index, method_specific):
+def _two_opt_on_route(graph, objective, solution, route_index, md):
     """Perform 2-opt strategy for single route"""
     # TODO: (verify that can optimize 0=>any) OR (do greedy: 0=>any and any'=>0)
     route = solution[route_index]
     route = route[1:len(route)-1]  # remove back depot from search
     can_improve = True
     while can_improve:
-        curr_best_O = objective(graph, solution, method_specific)
+        curr_best_O = objective(graph, solution, md)
         found_new_best = False
         for i in range(1, len(route) - 1):
             if found_new_best:  # fast loop-break
@@ -53,7 +53,7 @@ def _two_opt_on_route(graph, objective, solution, route_index, method_specific):
                 O = objective(
                     graph,
                     solution.changed(_reconstruct(graph, new_route), route_index),
-                    method_specific)
+                    md)
                 if O < curr_best_O:
                     route = new_route
                     found_new_best = True
@@ -67,11 +67,11 @@ def _two_opt_on_route(graph, objective, solution, route_index, method_specific):
     return _reconstruct(graph, route)
 
 
-def two_opt(graph, objective, solution, method_specific=None):
+def two_opt(graph, objective, solution, md=None):
     """Perform 2-opt operation on solution"""
     routes = [None] * len(solution)
     for i in range(len(solution)):
-        routes[i] = _two_opt_on_route(graph, objective, solution, i, method_specific)
+        routes[i] = _two_opt_on_route(graph, objective, solution, i, md)
     return Solution(routes)
 
 
@@ -118,9 +118,9 @@ class LssTests(unittest.TestCase):
                 self.costs = Costs()
                 self.depot = 0
 
-        def distance(graph, solution, method_specific):
+        def distance(graph, solution, md):
             """Calculate overall distance"""
-            del method_specific
+            del md
             s = 0
             for route in solution:
                 s += sum(graph.costs[[route[i], route[i+1]]] for i in range(len(route)-1))
@@ -139,7 +139,7 @@ class LssTests(unittest.TestCase):
             TestGraph(),
             distance,
             test,
-            method_specific=None)
+            md=None)
         self.assertEqual(expected, actual)
 
 if __name__ == '__main__':

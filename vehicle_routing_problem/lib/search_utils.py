@@ -62,10 +62,21 @@ def construct_initial_solution(graph, ignore_constraints=False):
     return Solution(routes=routes)
 
 
-def local_search(graph, objective, solution, method_specific=None):
+def local_search(graph, objective, solution, md=None):
     """Perform local search"""
     # TODO: implement "smarter" local search
-    return two_opt(graph, objective, solution, method_specific)
+    return two_opt(graph, objective, solution, md)
+
+
+def choose_penalty_features(graph, solution, md):
+    """Choose features to penalize upon given a solution"""
+    edges = []
+    for route in solution:
+        for i in range(len(route)-1):
+            edges.append((route[i], route[i+1]))
+    return edges
+
+
 
 
 # Unit Tests
@@ -111,9 +122,9 @@ CUST NO.   XCOORD.   YCOORD.   DEMAND    READY TIME   DUE DATE   SERVICE TIME
             self.fail(str(e))
 
     def test_local_search_works(self):
-        def distance(graph, solution, method_specific):
+        def distance(graph, solution, md):
             """Calculate overall distance"""
-            del method_specific
+            del md
             s = 0
             for route in solution:
                 s += sum(graph.costs[[route[i], route[i+1]]] for i in range(len(route)-1))
