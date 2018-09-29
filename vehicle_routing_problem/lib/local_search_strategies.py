@@ -19,8 +19,8 @@ def import_from(rel_path):
     sys.path.pop(0)
 
 with import_from('../'):
-    from lib.graph_utils import Solution
-    from lib.graph_utils import Objective
+    from lib.graph import Solution
+    from lib.graph import Objective
 
 
 # [1] 2-opt | credits: https://en.wikipedia.org/wiki/2-opt
@@ -36,14 +36,14 @@ def _reconstruct(graph, route):
     return [graph.depot] + route + [graph.depot]
 
 
-def _two_opt_on_route(graph, objective, solution, route_index, penalties):
+def _two_opt_on_route(graph, objective, solution, route_index, method_specific):
     """Perform 2-opt strategy for single route"""
     # TODO: (verify that can optimize 0=>any) OR (do greedy: 0=>any and any'=>0)
     route = solution[route_index]
     route = route[1:len(route)-1]  # remove back depot from search
     can_improve = True
     while can_improve:
-        curr_best_O = objective(graph, solution, penalties)
+        curr_best_O = objective(graph, solution, method_specific)
         found_new_best = False
         for i in range(1, len(route) - 1):
             if found_new_best:  # fast loop-break
@@ -53,7 +53,7 @@ def _two_opt_on_route(graph, objective, solution, route_index, penalties):
                 O = objective(
                     graph,
                     solution.changed(_reconstruct(graph, new_route), route_index),
-                    penalties)
+                    method_specific)
                 if O < curr_best_O:
                     route = new_route
                     found_new_best = True
@@ -67,11 +67,11 @@ def _two_opt_on_route(graph, objective, solution, route_index, penalties):
     return _reconstruct(graph, route)
 
 
-def two_opt(graph, objective, solution, penalties=None):
+def two_opt(graph, objective, solution, method_specific=None):
     """Perform 2-opt operation on solution"""
     routes = [None] * len(solution)
     for i in range(len(solution)):
-        routes[i] = _two_opt_on_route(graph, objective, solution, i, penalties)
+        routes[i] = _two_opt_on_route(graph, objective, solution, i, method_specific)
     return Solution(routes)
 
 
@@ -118,9 +118,9 @@ class LssTests(unittest.TestCase):
                 self.costs = Costs()
                 self.depot = 0
 
-        def distance(graph, solution, penalties):
+        def distance(graph, solution, method_specific):
             """Calculate overall distance"""
-            del penalties
+            del method_specific
             s = 0
             for route in solution:
                 s += sum(graph.costs[[route[i], route[i+1]]] for i in range(len(route)-1))
@@ -139,7 +139,7 @@ class LssTests(unittest.TestCase):
             TestGraph(),
             distance,
             test,
-            penalties=None)
+            method_specific=None)
         self.assertEqual(expected, actual)
 
 if __name__ == '__main__':

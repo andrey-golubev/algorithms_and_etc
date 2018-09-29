@@ -17,8 +17,8 @@ def import_from(rel_path):
     sys.path.pop(0)
 
 with import_from('.'):
-    from lib.graph_utils import GraphUtils
-    from lib.graph_utils import objective
+    from lib.graph import Graph
+    from lib.graph import Objective
     import lib.search_utils as search
 
 
@@ -38,8 +38,22 @@ def optimal_start_times(graph):
     return graph
 
 
-def gls_objective(graph, route, penalties):
-    return objective(route) # + f(penalties)
+class GlsObjective(Objective):
+    """Guided local search objective function"""
+    def __init__(self):
+        """Init method"""
+        def distance(graph, solution, method_specific):
+            """Calculate overall distance"""
+            del method_specific
+            s = 0
+            for route in solution:
+                s += sum(graph.costs[[route[i], route[i+1]]] for i in range(len(route)-1))
+            return s
+        self.distance = distance
+
+    def __call__(self, graph, solution, method_specific):
+        """operator() overload"""
+        return self.distance(graph, solution, method_specific)
 
 
 def main():
@@ -47,10 +61,11 @@ def main():
     args = parse_args()
     graph = None
     with open(args.instance) as instance_file:
-        graph = GraphUtils(instance_file)
+        graph = Graph(instance_file)
+    objective_function = GlsObjective()
     start = time.time()
     S = search.construct_initial_solution(graph, ignore_constraints=True)
-    S = search.local_search(graph, gls_objective, S)
+    S = search.local_search(graph, objective_function, S)
     print('All served?', S.all_served(graph.customer_number))
     print('----- PERFORMANCE -----')
     print('VRP took {some} seconds'.format(

@@ -14,19 +14,13 @@ def import_from(rel_path):
     sys.path.pop(0)
 
 with import_from('../'):
-    from lib.matrix import Matrix
-
-
-def objective(solution):
-    """Calculate objective function"""
-    return 0
+    from lib.customer import Matrix
 
 
 class Solution(object):
     """
     VRP solution representation
     """
-
     def __init__(self, routes):
         """Init method"""
         self._routes = routes
@@ -86,24 +80,24 @@ class Solution(object):
 class Objective(ABC):
     """Objective function interface"""
     @abstractmethod
-    def __call__(self, graph, solution, penalties):
+    def __call__(self, graph, solution, method_specific):
         """operator() interface"""
         del graph
         del solution
-        del penalties
+        del method_specific
         return 0
 
 class CostMap(Matrix):
     """
     Cost map between customers
     """
-
     def __init__(self, customers):
         """Init method"""
         super(CostMap, self).__init__(customers, CostMap.calculate_cost)
 
     @staticmethod
     def calculate_cost(a, b):
+        """Cost function"""
         return math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2)
 
 
@@ -121,14 +115,13 @@ def _skip_lines(input_file, keyword):
     return input_file
 
 
-class GraphUtils(object):
+class Graph(object):
     """
     Main class for graph abstraction
     """
-
     def __init__(self, io_stream):
         """Init method"""
-        _name, number, cap, input_data = GraphUtils.parse_instance(io_stream)
+        _name, number, cap, input_data = Graph.parse_instance(io_stream)
         self.instance_name = _name
         self.v_number = number
         self.vehicle_capacity = cap
@@ -170,17 +163,6 @@ class GraphUtils(object):
     def customers(self):
         """Return customers"""
         return self.costs.customers.keys()
-
-    # def objective(self, exclude=[]):
-    #     """Calculate objective function"""
-    #     if not (isinstance(exclude, list)):
-    #         exclude = [exclude]
-    #     costs = 0
-    #     for customer in self.path:
-    #         if customer.id in exclude:
-    #             continue
-    #         costs += self.costs[customer.id]
-    #     return costs
 
     def __len__(self):
         """Number of customers"""

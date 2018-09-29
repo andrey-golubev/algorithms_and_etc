@@ -4,14 +4,6 @@
 Library for local search and initial solution
 """
 
-# 1) initial solution
-# 2) 2-opt
-# 3) ? relocation
-# 4) tests
-# input: vector of paths
-# output: new vector of paths
-# can do optional: (found, new vector of paths)
-
 import unittest
 
 # local imports
@@ -28,12 +20,13 @@ def import_from(rel_path):
 
 
 with import_from('../'):
-    from lib.graph_utils import Solution
+    from lib.graph import Solution
+    from lib.graph import Graph
     from lib.local_search_strategies import two_opt
 
 
 def construct_initial_solution(graph, ignore_constraints=False):
-    """Construct Initial Solution given a GraphUtils object"""
+    """Construct Initial Solution given a Graph object"""
     routes = []
     depot = graph.depot
     # TODO: optimize whole operation
@@ -69,10 +62,10 @@ def construct_initial_solution(graph, ignore_constraints=False):
     return Solution(routes=routes)
 
 
-def local_search(graph, objective, solution, penalties=None):
+def local_search(graph, objective, solution, method_specific=None):
     """Perform local search"""
     # TODO: implement "smarter" local search
-    return two_opt(graph, objective, solution, penalties)
+    return two_opt(graph, objective, solution, method_specific)
 
 
 # Unit Tests
@@ -104,9 +97,8 @@ CUST NO.   XCOORD.   YCOORD.   DEMAND    READY TIME   DUE DATE   SERVICE TIME
     VERBOSE = False
 
     def setUp(self):
-        from graph_utils import GraphUtils
         from io import StringIO
-        self.graph = GraphUtils(StringIO(SearchUtilsTests.BASIC_VRP))
+        self.graph = Graph(StringIO(SearchUtilsTests.BASIC_VRP))
         super(SearchUtilsTests, self).setUp()
 
     def test_construct_initial_solution_works(self):
@@ -119,9 +111,9 @@ CUST NO.   XCOORD.   YCOORD.   DEMAND    READY TIME   DUE DATE   SERVICE TIME
             self.fail(str(e))
 
     def test_local_search_works(self):
-        def distance(graph, solution, penalties):
+        def distance(graph, solution, method_specific):
             """Calculate overall distance"""
-            del penalties
+            del method_specific
             s = 0
             for route in solution:
                 s += sum(graph.costs[[route[i], route[i+1]]] for i in range(len(route)-1))
