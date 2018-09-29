@@ -1,5 +1,5 @@
+from abc import ABC, abstractmethod
 import math
-from prettytable import PrettyTable
 
 # local imports
 from contextlib import contextmanager
@@ -17,18 +17,9 @@ with import_from('../'):
     from lib.matrix import Matrix
 
 
-def skip_lines(input_file, keyword):
-    """
-    Skip lines in input file until keyword is met
-    Next line after keyword line is read
-    """
-    dummy = ''
-    while True:
-        dummy = input_file.readline().strip()
-        if dummy == keyword:
-            dummy = input_file.readline()
-            break
-    return input_file
+def objective(solution):
+    """Calculate objective function"""
+    return 0
 
 
 class Solution(object):
@@ -39,6 +30,12 @@ class Solution(object):
     def __init__(self, routes):
         """Init method"""
         self._routes = routes
+
+    def changed(self, route, route_index):
+        """Return new changed solution with new route"""
+        routes = list(self._routes)
+        routes[route_index] = route
+        return Solution(routes)
 
     def __str__(self):
         """Serialize solution"""
@@ -51,8 +48,8 @@ class Solution(object):
         """Return route by key(index)"""
         if not isinstance(key, int):
             raise ValueError('wrong key type')
-        return self._routes[key]
 
+        return self._routes[key]
     def __len__(self):
         """Return length of solution: number of routes"""
         return len(self._routes)
@@ -86,6 +83,16 @@ class Solution(object):
         return len(served_customers) == number_of_customers
 
 
+class Objective(ABC):
+    """Objective function interface"""
+    @abstractmethod
+    def __call__(self, graph, solution, penalties):
+        """operator() interface"""
+        del graph
+        del solution
+        del penalties
+        return 0
+
 class CostMap(Matrix):
     """
     Cost map between customers
@@ -98,6 +105,20 @@ class CostMap(Matrix):
     @staticmethod
     def calculate_cost(a, b):
         return math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2)
+
+
+def _skip_lines(input_file, keyword):
+    """
+    Skip lines in input file until keyword is met
+    Next line after keyword line is read
+    """
+    dummy = ''
+    while True:
+        dummy = input_file.readline().strip()
+        if dummy == keyword:
+            dummy = input_file.readline()
+            break
+    return input_file
 
 
 class GraphUtils(object):
@@ -185,9 +206,9 @@ costs:
     def parse_instance(io_stream):
         """Parse VRP instance file"""
         name = io_stream.readline().strip()
-        io_stream = skip_lines(io_stream, 'VEHICLE')
+        io_stream = _skip_lines(io_stream, 'VEHICLE')
         number, capacity = io_stream.readline().strip().split()
-        io_stream = skip_lines(io_stream, 'CUSTOMER')
+        io_stream = _skip_lines(io_stream, 'CUSTOMER')
         customer_data = []
         for customer_str in io_stream.readlines():
             customer_str = customer_str.strip()

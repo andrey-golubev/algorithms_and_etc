@@ -18,6 +18,7 @@ def import_from(rel_path):
 
 with import_from('.'):
     from lib.graph_utils import GraphUtils
+    from lib.graph_utils import objective
     import lib.search_utils as search
 
 
@@ -37,6 +38,10 @@ def optimal_start_times(graph):
     return graph
 
 
+def gls_objective(graph, route, penalties):
+    return objective(route) # + f(penalties)
+
+
 def main():
     """Main entry point"""
     args = parse_args()
@@ -45,7 +50,7 @@ def main():
         graph = GraphUtils(instance_file)
     start = time.time()
     S = search.construct_initial_solution(graph, ignore_constraints=True)
-    S = search.local_search(graph, S)
+    S = search.local_search(graph, gls_objective, S)
     print('All served?', S.all_served(graph.customer_number))
     print('----- PERFORMANCE -----')
     print('VRP took {some} seconds'.format(

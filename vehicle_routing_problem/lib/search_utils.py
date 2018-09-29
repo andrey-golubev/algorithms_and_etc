@@ -29,7 +29,7 @@ def import_from(rel_path):
 
 with import_from('../'):
     from lib.graph_utils import Solution
-    from lib.local_search_strategies import two_opt_on_route
+    from lib.local_search_strategies import two_opt
 
 
 def construct_initial_solution(graph, ignore_constraints=False):
@@ -69,16 +69,10 @@ def construct_initial_solution(graph, ignore_constraints=False):
     return Solution(routes=routes)
 
 
-def local_search(graph, solution):
+def local_search(graph, objective, solution, penalties=None):
     """Perform local search"""
-    def two_opt(graph, solution):
-        """Perform 2-opt operation on solution"""
-        routes = [None] * len(solution)
-        for i, route in enumerate(solution):
-            routes[i] = two_opt_on_route(graph, route)
-        return Solution(routes)
     # TODO: implement "smarter" local search
-    return two_opt(graph, solution)
+    return two_opt(graph, objective, solution, penalties)
 
 
 # Unit Tests
@@ -125,9 +119,16 @@ CUST NO.   XCOORD.   YCOORD.   DEMAND    READY TIME   DUE DATE   SERVICE TIME
             self.fail(str(e))
 
     def test_local_search_works(self):
+        def distance(graph, solution, penalties):
+            """Calculate overall distance"""
+            del penalties
+            s = 0
+            for route in solution:
+                s += sum(graph.costs[[route[i], route[i+1]]] for i in range(len(route)-1))
+            return s
         try:
             S = construct_initial_solution(self.graph, ignore_constraints=False)
-            S_opt = local_search(self.graph, S)
+            S_opt = local_search(self.graph, distance, S, None)
             self.assertNotEqual(
                 S, S_opt,
                 msg='{S1} == {S2}'.format(S1=str(S), S2=str(S_opt)))

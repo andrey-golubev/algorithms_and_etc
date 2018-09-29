@@ -3,3 +3,4 @@ CMakeLists.txt.user
 _*
 __pycache__
 .test_data
+.pytest*
