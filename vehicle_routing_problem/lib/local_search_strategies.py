@@ -52,7 +52,9 @@ def _two_opt_on_route(graph, objective, solution, route_index, md):
                 new_route = _two_opt_swap(route, i, k)
                 O = objective(
                     graph,
-                    solution.changed(_reconstruct(graph, new_route), route_index),
+                    solution.changed(
+                        _reconstruct(graph, new_route),
+                        route_index),
                     md)
                 if O < curr_best_O:
                     route = new_route
@@ -75,8 +77,145 @@ def two_opt(graph, objective, solution, md=None):
     return Solution(routes)
 
 
+# [2] relocate operation
+def _distance_on_route(graph, route, i, k):
+    """Calculate distance from node (i) to node (k-1)"""
+    if i < 0 or len(route) < k:
+        raise ValueError('i < 0 or len(route) < k')
+    return sum(graph.costs[[route[ci], route[ci+1]]] for ci in range(i, k-1))
+
+
+def _relocate_one(graph, solution, customer):
+    """Find closest connected neighbours for a given customer"""
+    routes = list(solution.routes)
+    if customer == graph.depot:  # do not relocate depots
+        return Solution(routes)
+    sorted_neighbours = graph.neighbours[customer]
+    c_route_index, c_index = solution.find_route(customer)
+    if c_route_index is None:
+        # customer does not belong to any route. shouldn't happen
+        return None
+    if sorted_neighbours[0][0] == graph.depot:
+        # handle depot separately:
+        # if there are free vehicles, create new route
+        # else: proceed to main relocation loop
+        if len(routes) < graph.vehicle_num:
+            routes.append(_reconstruct(graph, [customer]))
+            routes[c_route_index].remove(c_index)
+            return Solution(routes)
+    for neighbour, dist in sorted_neighbours:
+        if neighbour == graph.depot:
+            # skip depot. TODO: verify if valid (probably not)
+            continue
+        n_route_index, n_index = solution.find_route(neighbour)
+        if n_route_index is None:
+            # neighbour does not belong to any route. shouldn't happen
+            return None
+        customer_route = solution.routes[c_route_index]
+        neighbour_route = solution.routes[n_route_index]
+        customer_distance = _distance_on_route(
+            graph,
+            customer_route,
+            c_index,
+            c_index+2)
+        customer_distance += _distance_on_route(
+            graph,
+            customer_route,
+            c_index-1,
+            c_index+1)
+        dist_customer_neighbour_prev = dist + graph.costs[[customer, neighbour_route[n_index-1]]]
+        dist_customer_neighbour_next = dist + graph.costs[[customer, neighbour_route[n_index+1]]]
+        if customer_distance < dist_customer_neighbour_prev and customer_distance < dist_customer_neighbour_next:
+            # infeasible to relocate anything
+            continue
+        # found better
+        if dist_customer_neighbour_prev < dist_customer_neighbour_next:
+            routes[n_route_index].insert(n_index, customer)
+        else:
+            routes[n_route_index].insert(n_index+1, customer)
+        routes[c_route_index].remove(c_index)
+        break
+    return Solution(routes)
+
+
+def relocate(graph, objective, solution, md=None):
+    """
+    Perform relocate operation on solution
+
+    Move a customer visit from one route to another.
+    Note: Can relocate to an "empty" route.
+    """
+    S = Solution(solution.routes)
+    for customer in graph.customers:
+        S = _relocate_one(graph, solution, customer)
+    return S
+
+
+# [3] exchange operation
+def exchange(graph, objective, solution, md=None):
+    """
+    Perform exchange operation on solution
+
+    Swap customer visits in different vehicle routes
+    """
+    # noop
+    return Solution(solution.routes)
+
+
+# [4] cross operation
+def cross(graph, objective, solution, md=None):
+    """
+    Perform cross operation on solution
+
+    Swap the end portions of two vehicle routes
+    """
+    # noop
+    return Solution(solution.routes)
+
 
 # Unit Tests
+class Costs(object):
+    def __init__(self, cost_function=None):
+        self.calc_cost = cost_function
+        if not self.calc_cost:
+            self.calc_cost = Costs.default_costs
+
+    @staticmethod
+    def default_costs(key):
+        costs = {
+            (0, 1): 1,
+            (0, 2): 1,
+            (0, 3): 2,
+            (1, 2): 2,
+            (1, 4): 1,
+            (2, 6): 1,
+            (3, 2): 1,
+            (3, 4): 1,
+            (5, 6): 1,
+        }
+        return costs.get(tuple(sorted(key)), 3)
+
+    def __getitem__(self, key):
+        """Get cost value by key"""
+        return self.calc_cost(key)
+
+class TestGraph(object):
+    def __init__(self, neighbours=None, cost_function=None):
+        """Init method"""
+        self.costs = Costs(cost_function)
+        self.depot = 0
+        self.neighbours = neighbours
+        self.vehicle_num = 2
+
+def distance(graph, solution, md):
+    """Calculate overall distance"""
+    del md
+    s = 0
+    for route in solution:
+        s += sum(graph.costs[[route[i], route[i+1]]] for i in range(len(route)-1))
+    return s
+
+
 class LssTests(unittest.TestCase):
     """Unit Tests for search_utils methods"""
     def test_two_opt_swap_works_basic_case(self):
@@ -97,35 +236,6 @@ class LssTests(unittest.TestCase):
 
     def test_two_opt_works(self):
         """Test 2-opt works"""
-        class Costs(object):
-            def __getitem__(self, key):
-                """Get cost value by key"""
-                costs = {
-                    (0, 1): 1,
-                    (0, 2): 1,
-                    (0, 3): 2,
-                    (1, 2): 2,
-                    (1, 4): 1,
-                    (2, 6): 1,
-                    (3, 2): 1,
-                    (3, 4): 1,
-                    (5, 6): 1,
-                }
-                return costs.get(tuple(sorted(key)), 3)
-        class TestGraph(object):
-            def __init__(self):
-                """Init method"""
-                self.costs = Costs()
-                self.depot = 0
-
-        def distance(graph, solution, md):
-            """Calculate overall distance"""
-            del md
-            s = 0
-            for route in solution:
-                s += sum(graph.costs[[route[i], route[i+1]]] for i in range(len(route)-1))
-            return s
-
         # single route solutions used
         test = Solution([
             [0, 1, 4, 5, 2, 3, 0],
@@ -141,6 +251,130 @@ class LssTests(unittest.TestCase):
             test,
             md=None)
         self.assertEqual(expected, actual)
+
+    def test_distance_on_route_works(self):
+        """Test _distance_on_route works"""
+        test = [0, 1, 4, 5, 2, 3, 0]
+        size = len(test)
+        self.assertEqual(13, _distance_on_route(TestGraph(), test, 0, size))
+        self.assertEqual(11, _distance_on_route(TestGraph(), test, 0, size - 1))
+        self.assertEqual(3, _distance_on_route(TestGraph(), test, 2, 4))
+        self.assertEqual(0, _distance_on_route(TestGraph(), test, 2, 3))
+
+
+class LssRelocateTests(unittest.TestCase):
+    """Unit Tests for search_utils methods"""
+    def _prepare_neighbours(self, cost_func):
+        neighbours = {
+            0: [],
+            1: [],
+            2: [],
+            3: [],
+            4: [],
+            5: [],
+            6: []
+        }
+        for n in neighbours.keys():
+            neighbours[n] = sorted(
+                [(other, cost_func((n, other))) for other in neighbours.keys() if other != n],
+                key=lambda x: x[1])
+        return neighbours
+
+    def test_relocate_one_works_1(self):
+        """Test relocate works for single customer"""
+        def relocate_costs(key):
+            costs = {
+                (2, 4): 1,
+                (2, 5): 2
+            }
+            return costs.get(tuple(sorted(key)), 3)
+        neighbours = self._prepare_neighbours(relocate_costs)
+
+        actual = Solution([
+            [0, 1, 2, 3, 0],
+            [0, 4, 5, 6, 0]
+        ])
+        expected = Solution([
+            [0, 1, 3, 0],
+            [0, 4, 2, 5, 6, 0]
+        ])
+        graph = TestGraph(neighbours, relocate_costs)
+        actual = _relocate_one(graph, actual, 2)
+        self.assertEqual(expected, actual)
+
+    def test_relocate_one_works_2(self):
+        """Test relocate works for single customer"""
+        def relocate_costs(key):
+            costs = {
+                    (0, 2): 1,
+                    (2, 4): 1,
+                }
+            return costs.get(tuple(sorted(key)), 3)
+        neighbours = self._prepare_neighbours(relocate_costs)
+
+        actual = Solution([
+            [0, 1, 2, 3, 0],
+            [0, 4, 5, 6, 0]
+        ])
+        expected = Solution([
+            [0, 1, 3, 0],
+            [0, 2, 4, 5, 6, 0]
+        ])
+        graph = TestGraph(neighbours, relocate_costs)
+        actual = _relocate_one(graph, actual, 2)
+        self.assertEqual(expected, actual)
+
+    def test_relocate_one_works_3(self):
+        """
+        Test relocate works for single customer
+
+        Test relocate creates new route if possible when depot is closest
+        to customer
+        """
+        def relocate_costs(key):
+            costs = {
+                    (0, 2): 1,
+                    (2, 4): 1,
+                }
+            return costs.get(tuple(sorted(key)), 3)
+        neighbours = self._prepare_neighbours(relocate_costs)
+
+        actual = Solution([
+            [0, 1, 2, 3, 0],
+            [0, 4, 5, 6, 0]
+        ])
+        expected = Solution([
+            [0, 1, 3, 0],
+            [0, 4, 5, 6, 0],
+            [0, 2, 0]
+        ])
+        graph = TestGraph(neighbours, relocate_costs)
+        graph.vehicle_num = 3
+        actual = _relocate_one(graph, actual, 2)
+        self.assertEqual(expected, actual)
+
+    def test_relocate_one_works_4(self):
+        """
+        Test relocate works for single customer
+
+        Test relocate does nothing if no better solution found
+        """
+        def relocate_costs(key):
+            return 3
+        neighbours = self._prepare_neighbours(relocate_costs)
+
+        actual = Solution([
+            [0, 1, 2, 3, 0],
+            [0, 4, 5, 6, 0]
+        ])
+        expected = Solution([
+            [0, 1, 2, 3, 0],
+            [0, 4, 5, 6, 0]
+        ])
+        graph = TestGraph(neighbours, relocate_costs)
+        actual = _relocate_one(graph, actual, 2)
+        self.assertEqual(expected, actual)
+
 
 if __name__ == '__main__':
     unittest.main()

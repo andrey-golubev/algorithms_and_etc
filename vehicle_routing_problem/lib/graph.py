@@ -42,8 +42,8 @@ class Solution(object):
         """Return route by key(index)"""
         if not isinstance(key, int):
             raise ValueError('wrong key type')
-
         return self._routes[key]
+
     def __len__(self):
         """Return length of solution: number of routes"""
         return len(self._routes)
@@ -68,6 +68,14 @@ class Solution(object):
         for route in self.routes:
             served_customers |= {c.id for c in route}
         return len(self._routes), len(served_customers)
+
+    def find_route(self, customer):
+        """Find which route customer belongs to"""
+        for ri, route in enumerate(self.routes):
+            for i, c in enumerate(route):
+                if customer == c:
+                    return ri, i
+        return None, None
 
     def all_served(self, number_of_customers):
         """Return whether all customers are served"""
@@ -148,6 +156,13 @@ class Graph(object):
         self._input_data = input_data
         self.cost_map = CostMap(input_data)
         self.c_number = len(input_data)
+        # find distance to neighbours of each customer
+        self._neighbours_map = {}
+        for customer in self.cost_map.customers:
+            self._neighbours_map[customer] = sorted(
+                [(other, self.cost_map[[customer, other]]) \
+                    for other in self.customers],
+                key=lambda x: x[1])
 
     @property
     def name(self):
@@ -187,6 +202,10 @@ class Graph(object):
     def raw_data(self):
         """Return raw input data"""
         return self._input_data
+
+    @property
+    def neighbours(self):
+        return self._neighbours_map
 
     def __len__(self):
         """Number of customers"""
