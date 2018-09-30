@@ -1,3 +1,5 @@
+"""Customer and Matrix data types"""
+
 class Customer(object):
     """Customer graph node"""
     def __init__(self, row):

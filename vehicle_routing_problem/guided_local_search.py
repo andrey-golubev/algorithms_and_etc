@@ -23,6 +23,7 @@ with import_from('.'):
     from lib.graph import Objective
     from lib.graph import PenaltyMap
     import lib.search_utils as search
+    from lib.visualize import visualize
 
 
 def parse_args():
@@ -115,6 +116,7 @@ def main():
         print('All served?', S.all_served(graph.customer_number))
         print('----- PERFORMANCE -----')
         print('VRP took {some} seconds'.format(some=elapsed))
+        visualize(S)
     return 0
 
 
