@@ -7,6 +7,7 @@ Library for local search and initial solution
 import unittest
 import concurrent.futures as futures
 import multiprocessing
+import copy
 
 
 # local imports
@@ -25,12 +26,14 @@ def import_from(rel_path):
 with import_from('../'):
     from lib.graph import Solution
     from lib.graph import Graph
+    from lib.customer import Customer
     from lib.local_search_strategies import two_opt
     from lib.local_search_strategies import relocate
     from lib.constraints import satisfies_all_constraints
+    from lib.constraints import find_capacity_violations, find_time_violations
 
 
-def _greedy_initial(graph, ignore_constraints=False):
+def _greedy_initial(graph):
     """Construct initial solution greedily"""
     routes = []
     depot = graph.depot
@@ -58,9 +61,8 @@ def _greedy_initial(graph, ignore_constraints=False):
                 updated_route.append(next_customer)
                 updated_route.append(depot)
                 updated_routes.append(updated_route)
-                if not ignore_constraints:
-                    if not satisfies_all_constraints(graph, Solution(updated_routes)):
-                        break
+                if not satisfies_all_constraints(graph, Solution(updated_routes)):
+                    break
                 visited.add(next_customer)
                 vehicle_route = updated_route[:len(updated_route) - 1]
                 route_capacity -= demand
@@ -70,7 +72,7 @@ def _greedy_initial(graph, ignore_constraints=False):
     return Solution(routes=routes)
 
 
-def _naive_initial(graph, ignore_constraints=False):
+def _naive_initial(graph):
     """Construct initial solution naively"""
     routes = []
     depot = graph.depot
@@ -82,7 +84,75 @@ def _naive_initial(graph, ignore_constraints=False):
     return Solution(routes=routes)
 
 
-def construct_initial_solution(graph, objective, md=None, ignore_constraints=False):
+def _reconstruct(graph, route):
+    if not route[0] == graph.depot:
+        route.insert(0, graph.depot)
+    if not route[-1] == graph.depot:
+        route.append(graph.depot)
+    return route
+
+
+def _split_route_by_capacity(graph, route):
+    """Split route into separate to fulfill constraints"""
+    routes = []
+    start = 0
+    capacity = graph.capacity
+    for i, c in enumerate(route):
+        capacity -= c.demand
+        if capacity < 0:
+            split_route = _reconstruct(graph, route[start:i])
+            routes.append(split_route)
+            start = i
+            capacity += graph.capacity
+    if start != len(route):
+        routes.append(_reconstruct(graph, route[start:len(route)]))
+    return routes
+
+
+def _split_route_by_time(graph, route):
+    """Split route into separate to fulfill constraints"""
+    routes = []
+    start = 0
+    time = 0
+    # c.ready + c.service + distance(c, next_c) + next_c.service
+    # <=
+    # next_c.due_date
+    for i in range(len(route)-1):
+        c = route[i]
+        next_c = route[i+1]
+        time += c.ready_time + c.service_time + graph.costs[[c, next_c]]
+        time += next_c.service_time
+        if time > next_c.due_date:
+            routes.append(route[start:i+1])
+            start = i+1
+    return routes
+
+
+def _make_feasible(graph, S):
+    """
+    Make solution feasible
+
+    1. Find violations
+    2. Split route into separate to fulfill requirements
+    """
+    capacity_violations = find_capacity_violations(graph, S)
+    for ri, _ in reversed(capacity_violations):
+        del S.routes[ri]
+    for ri, route in capacity_violations:
+        routes = _split_route_by_capacity(graph, route)
+        S.append(routes)
+
+    # TODO: time violations
+    # time_violations = find_time_violations(graph, S)
+    # for ri, route in time_violations:
+    #     routes = _split_route_by_time(graph, route)
+    #     S.append(routes)
+    # for ri, _ in reversed(time_violations):
+    #     del S.routes[ri]
+    return S
+
+
+def construct_initial_solution(graph, objective, md=None):
     """
     Construct initial solution given a graph
 
@@ -90,9 +160,13 @@ def construct_initial_solution(graph, objective, md=None, ignore_constraints=Fal
     2. Use relocate to construct decent solution
     3. Make solution feasible
     """
-    S = _naive_initial(graph, ignore_constraints)
+    S = _naive_initial(graph)
+    if md:
+        md = copy.deepcopy(md)
+        md['ignore_feasibility'] = True
     S = relocate(graph, objective, S, md)
-    # TODO: make solution feasible
+    S = _make_feasible(graph, S)
+    S = relocate(graph, objective, S, md)
     return S
 
 
@@ -174,17 +248,6 @@ CUST NO.   XCOORD.   YCOORD.   DEMAND    READY TIME   DUE DATE   SERVICE TIME
         from io import StringIO
         self.graph = Graph(StringIO(SearchUtilsTests.BASIC_VRP))
         super(SearchUtilsTests, self).setUp()
-
-    def test_construct_initial_solution_works(self):
-        try:
-            S = construct_initial_solution(self.graph, ignore_constraints=False)
-            if SearchUtilsTests.VERBOSE:
-                print(S)
-            self.assertTrue(S)
-        except Exception as e:
-            self.fail(str(e))
-
-    def test_local_search_works(self):
         def distance(graph, solution, md):
             """Calculate overall distance"""
             del md
@@ -192,18 +255,70 @@ CUST NO.   XCOORD.   YCOORD.   DEMAND    READY TIME   DUE DATE   SERVICE TIME
             for route in solution:
                 s += sum(graph.costs[[route[i], route[i+1]]] for i in range(len(route)-1))
             return s
-        try:
-            S = construct_initial_solution(self.graph, ignore_constraints=False)
-            S_opt = local_search(self.graph, distance, S, None)
-            self.assertNotEqual(
-                S, S_opt,
-                msg='{S1} == {S2}'.format(S1=str(S), S2=str(S_opt)))
-            if SearchUtilsTests.VERBOSE:
-                print(S)
-                print(S_opt)
-        except Exception as e:
-            self.fail(str(e))
+        self.obj = distance
 
+    def test_construct_initial_solution_works(self):
+        S = construct_initial_solution(self.graph, self.obj)
+        if SearchUtilsTests.VERBOSE:
+            print(S)
+        self.assertTrue(S)
+
+    def test_local_search_works(self):
+        S = construct_initial_solution(self.graph, self.obj)
+        S_opt = local_search(self.graph, self.obj, S, None)
+        self.assertNotEqual(
+            S, S_opt,
+            msg='{S1} == {S2}'.format(S1=str(S), S2=str(S_opt)))
+        if SearchUtilsTests.VERBOSE:
+            print(S)
+            print(S_opt)
+
+    def test_split_route_works(self):
+        def _c(id, demand=0, r_time=0, dd=0, s_time=0):
+            return Customer([id, 0, 0, demand, r_time, dd, s_time])
+
+        class Tmp(object):
+            def __init__(self):
+                self.capacity = 3
+                self.depot = _c(0, 0, dd=100)
+                # self.costs = lambda x: 1
+        graph = Tmp()
+        actual = [
+            graph.depot,
+            _c(1, 2),
+            _c(2, 1),
+            _c(3, 3),
+            _c(4, 3),
+            _c(5, 1),
+            _c(6, 1),
+            graph.depot
+        ]
+        expected = [
+            [graph.depot, _c(1, 2), _c(2, 1), graph.depot],
+            [graph.depot, _c(3, 3), graph.depot],
+            [graph.depot, _c(4, 3), graph.depot],
+            [graph.depot, _c(5, 1), _c(6, 1), graph.depot]
+        ]
+        actual = _split_route_by_capacity(graph, actual)
+        self.assertEqual(expected, actual)
+
+        # actual = [
+        #     graph.depot,
+        #     _c(1, 2, 10, 11, 1),
+        #     _c(2, 1, 3, 10, 2),
+        #     _c(3, 3, 0, 7, 1),
+        #     _c(4, 3, 5, 6, 1),
+        #     _c(5, 1, 0, 8, 2),
+        #     _c(6, 1, 0, 16, 6),
+        #     graph.depot
+        # ]
+        # expected = [
+        #     [graph.depot, _c(5), _c(1), _c(6), graph.depot],
+        #     [graph.depot, _c(2), _c(3), graph.depot],
+        #     [graph.depot, _c(4), graph.depot],
+        # ]
+        # actual = _split_route_by_time(graph, actual)
+        # self.assertEqual(expected, actual)
 
 if __name__ == '__main__':
     unittest.main()

@@ -35,10 +35,7 @@ class Solution(object):
 
     def __str__(self):
         """Serialize solution"""
-        routes = []
-        for route in self.routes:
-            routes.append([c.id for c in route])
-        return routes.__str__()
+        return self.ids().__str__()
 
     def __getitem__(self, key):
         """Return route by key(index)"""
@@ -93,6 +90,13 @@ class Solution(object):
             ids.append([c.id for c in route])
         return ids
 
+    def append(self, routes):
+        """Append route to solution"""
+        for route in routes:
+            if not isinstance(route, list):
+                continue
+            self._routes.append(route)
+        return self
 
 class Objective(ABC):
     """Objective function interface"""

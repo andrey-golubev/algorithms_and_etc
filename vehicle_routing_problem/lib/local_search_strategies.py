@@ -110,6 +110,9 @@ def _relocate_one(customer, graph, objective, S, md=None):
     """Relocate single customer"""
     if customer == graph.depot:  # do not relocate depots
         return S
+    ignore = False
+    if md:
+        ignore = md.get('ignore_feasibility', False)
     sorted_neighbours = graph.neighbours[customer]
     curr_best_O = objective(graph, S, md)
     for neighbour, dist in sorted_neighbours:
@@ -170,9 +173,11 @@ def _relocate_one(customer, graph, objective, S, md=None):
         new_S = Solution(new_routes)
         if objective(graph, new_S, md) >= curr_best_O:  # infeasible to relocate
             continue
-        S = new_S
+        if ignore:
+            S = new_S
         if not satisfies_all_constraints(graph, new_S):
             continue
+        S = new_S
         break
     return _delete_loops(S)
 

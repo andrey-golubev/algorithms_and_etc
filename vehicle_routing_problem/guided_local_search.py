@@ -77,13 +77,10 @@ def guided_local_search(graph, penalty_factor, max_iter):
     MD = {
         'p': PenaltyMap(graph.raw_data),  # penalties
         'lambda': penalty_factor,
-        'f': []  # feature set
+        'f': [],  # feature set,
+        'ignore_feasibility': False
     }
-    S = search.construct_initial_solution(graph, ignore_constraints=True)
-    # # fix naive initial solution
-    # S = search.relocate(graph, O, S, MD)
-    # if VERBOSE:
-    #     print('Satisfies all?', satisfies_all_constraints(graph, S))
+    S = search.construct_initial_solution(graph, O, MD)
     best_S = S
 
     if VERBOSE:
@@ -102,6 +99,7 @@ def guided_local_search(graph, penalty_factor, max_iter):
             # function stops decresing, best solution found
             break
         best_S = S
+
         if VERBOSE and i % 50 == 0:
             print("O* so far:", O(graph, best_S, None))
 
