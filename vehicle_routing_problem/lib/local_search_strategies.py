@@ -5,6 +5,7 @@ Internal library for local search strategies
 """
 
 import unittest
+import copy
 
 # local imports
 from contextlib import contextmanager
@@ -79,40 +80,52 @@ def two_opt(graph, objective, solution, md=None):
 
 # [2] relocate operation
 def _distance_on_route(graph, route, i, k):
-    """Calculate distance from node (i) to node (k-1)"""
+    """
+    Calculate distance from node (i) to node (k-1)
+
+    Note: this is kind of a oversimplified objective function
+    """
     if i < 0 or len(route) < k:
         raise ValueError('i < 0 or len(route) < k')
     return sum(graph.costs[[route[ci], route[ci+1]]] for ci in range(i, k-1))
 
 
-def _relocate_one(graph, solution, customer):
-    """Find closest connected neighbours for a given customer"""
-    routes = list(solution.routes)
+def _relocate_one(customer, graph, objective, S, md=None):
+    """Relocate single customer"""
     if customer == graph.depot:  # do not relocate depots
-        return Solution(routes)
+        return S
+    routes = list(S.routes)
     sorted_neighbours = graph.neighbours[customer]
-    c_route_index, c_index = solution.find_route(customer)
+    c_route_index, c_index = S.find_route(customer)
     if c_route_index is None:
         # customer does not belong to any route. shouldn't happen
         return None
-    if sorted_neighbours[0][0] == graph.depot:
-        # handle depot separately:
-        # if there are free vehicles, create new route
-        # else: proceed to main relocation loop
-        if len(routes) < graph.vehicle_num:
-            routes.append(_reconstruct(graph, [customer]))
-            routes[c_route_index].pop(c_index)
-            return Solution(routes)
+    curr_best_O = objective(graph, S, md)
     for neighbour, dist in sorted_neighbours:
         if neighbour == graph.depot:
-            # skip depot. TODO: verify if valid (probably not)
-            continue
-        n_route_index, n_index = solution.find_route(neighbour)
+            # handle depot separately:
+            # if there are free vehicles, create new route
+            # else: skip depot -> can't relocate
+            if len(routes) >= graph.vehicle_number:
+                continue
+            new_routes = copy.deepcopy(routes)
+            new_routes.append(_reconstruct(graph, [customer]))
+            new_routes[c_route_index].pop(c_index)
+            new_S = Solution(new_routes)
+            new_O = objective(graph, new_S, md)
+            if new_O > curr_best_O:  # skip if not better
+                continue
+            return new_S
+        n_route_index, n_index = S.find_route(neighbour)
         if n_route_index is None:
             # neighbour does not belong to any route. shouldn't happen
             return None
-        customer_route = solution.routes[c_route_index]
-        neighbour_route = solution.routes[n_route_index]
+        if c_route_index == n_route_index:
+            # no need to relocate within a single route
+            continue
+        customer_route = S.routes[c_route_index]
+        neighbour_route = S.routes[n_route_index]
+        # TODO: use objective instead of distance
         customer_distance = _distance_on_route(
             graph,
             customer_route,
@@ -129,26 +142,30 @@ def _relocate_one(graph, solution, customer):
             # infeasible to relocate anything
             continue
         # found better
+        new_routes = copy.deepcopy(routes)
         if dist_customer_neighbour_prev < dist_customer_neighbour_next:
-            routes[n_route_index].insert(n_index, customer)
+            new_routes[n_route_index].insert(n_index, customer)
         else:
-            routes[n_route_index].insert(n_index+1, customer)
-        routes[c_route_index].pop(c_index)
-        break
-    return Solution(routes)
+            new_routes[n_route_index].insert(n_index+1, customer)
+        new_routes[c_route_index].pop(c_index)
+        new_S = Solution(new_routes)
+        if objective(graph, new_S, md) >= curr_best_O:
+            # infeasible to relocate
+            continue
+        return new_S
+    return S
 
 
 def relocate(graph, objective, solution, md=None):
     """
     Perform relocate operation on solution
 
-    Move a customer visit from one route to another.
+    Move a customer from one route to another if makes sense.
     Note: Can relocate to an "empty" route.
     """
-    S = Solution(solution.routes)
     for customer in graph.customers:
-        S = _relocate_one(graph, solution, customer)
-    return S
+        solution = _relocate_one(customer, graph, objective, solution, md)
+    return solution
 
 
 # [3] exchange operation
@@ -205,7 +222,7 @@ class TestGraph(object):
         self.costs = Costs(cost_function)
         self.depot = 0
         self.neighbours = neighbours
-        self.vehicle_num = 2
+        self.vehicle_number = 2
 
 def distance(graph, solution, md):
     """Calculate overall distance"""
@@ -299,7 +316,7 @@ class LssRelocateTests(unittest.TestCase):
             [0, 4, 2, 5, 6, 0]
         ])
         graph = TestGraph(neighbours, relocate_costs)
-        actual = _relocate_one(graph, actual, 2)
+        actual = _relocate_one(2, graph, distance, actual)
         self.assertEqual(expected, actual)
 
     def test_relocate_one_works_2(self):
@@ -321,7 +338,7 @@ class LssRelocateTests(unittest.TestCase):
             [0, 2, 4, 5, 6, 0]
         ])
         graph = TestGraph(neighbours, relocate_costs)
-        actual = _relocate_one(graph, actual, 2)
+        actual = _relocate_one(2, graph, distance, actual)
         self.assertEqual(expected, actual)
 
     def test_relocate_one_works_3(self):
@@ -349,8 +366,8 @@ class LssRelocateTests(unittest.TestCase):
             [0, 2, 0]
         ])
         graph = TestGraph(neighbours, relocate_costs)
-        graph.vehicle_num = 3
-        actual = _relocate_one(graph, actual, 2)
+        graph.vehicle_number = 3
+        actual = _relocate_one(2, graph, distance, actual)
         self.assertEqual(expected, actual)
 
     def test_relocate_one_works_4(self):
@@ -372,7 +389,7 @@ class LssRelocateTests(unittest.TestCase):
             [0, 4, 5, 6, 0]
         ])
         graph = TestGraph(neighbours, relocate_costs)
-        actual = _relocate_one(graph, actual, 2)
+        actual = _relocate_one(2, graph, distance, actual)
         self.assertEqual(expected, actual)
 
 

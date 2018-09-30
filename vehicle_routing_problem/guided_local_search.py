@@ -92,8 +92,13 @@ def guided_local_search(graph, penalty_factor, max_iter):
         for a, b in MD['f']:
             MD['p'][[a, b]] += 1
         S = search.local_search(graph, O, S, MD)
-        if O(graph, S, MD) < O(graph, best_S, MD):
-            best_S = S
+        if O(graph, S, None) >= O(graph, best_S, None):
+            # due to deterministic behavior of the local search, once objective
+            # function stops decresing, best solution found
+            break
+        best_S = S
+        if VERBOSE and i % 50 == 0:
+            print("O* so far:", O(graph, best_S, None))
 
     if VERBOSE:
         progress.finish()

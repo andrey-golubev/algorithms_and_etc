@@ -163,7 +163,7 @@ class Graph(object):
         for customer in self.cost_map.customers:
             self._neighbours_map[customer] = sorted(
                 [(other, self.cost_map[[customer, other]]) \
-                    for other in self.customers],
+                    for other in self.customers if other != customer],
                 key=lambda x: x[1])
 
     @property
