@@ -5,6 +5,8 @@ Library for local search and initial solution
 """
 
 import unittest
+import concurrent.futures as futures
+import multiprocessing
 
 # local imports
 from contextlib import contextmanager
@@ -23,6 +25,7 @@ with import_from('../'):
     from lib.graph import Solution
     from lib.graph import Graph
     from lib.local_search_strategies import two_opt
+    from lib.local_search_strategies import relocate
 
 
 def construct_initial_solution(graph, ignore_constraints=False):
@@ -62,10 +65,46 @@ def construct_initial_solution(graph, ignore_constraints=False):
     return Solution(routes=routes)
 
 
+def _methods():
+    """Return available methods used in local search"""
+    return {
+        '2-opt': two_opt,
+        'relocate': relocate
+    }
+
+
+def _do_method(method, graph, O, S, md=None):
+    S = method(graph, O, S, md)
+    return (O(graph, S, md), S)
+
+
 def local_search(graph, objective, solution, md=None):
     """Perform local search"""
-    # TODO: implement "smarter" local search
-    return two_opt(graph, objective, solution, md)
+    single_thread = False
+    if single_thread:
+        S_two_opt = two_opt(graph, objective, solution, md)
+        S_relocate = relocate(graph, objective, solution, md)
+        O_two_opt = objective(graph, S_two_opt, md)
+        O_relocate = objective(graph, S_relocate, md)
+        # slightly prefer relocate over 2-opt
+        return S_relocate if O_relocate <= O_two_opt else S_two_opt
+    else:
+        methods = _methods()
+        results = []
+        with futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
+            future_per_search_method = {executor.submit(_do_method, m, graph, objective, solution, md): name for name, m in methods.items()}
+            for future in futures.as_completed(future_per_search_method):
+                method_name = future_per_search_method[future]
+                try:
+                    results.append(future.result())
+                except Exception as e:
+                    print('Exception in {method}: {e}. Skipping'.format(
+                        method=method_name,
+                        e=str(e)
+                    ))
+        if not results:
+            raise Exception('Every method failed')
+        return sorted(results, key=lambda x: x[0])[0][1]
 
 
 def choose_penalty_features(graph, solution, md):

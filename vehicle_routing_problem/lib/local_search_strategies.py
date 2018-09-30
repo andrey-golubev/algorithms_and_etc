@@ -101,7 +101,7 @@ def _relocate_one(graph, solution, customer):
         # else: proceed to main relocation loop
         if len(routes) < graph.vehicle_num:
             routes.append(_reconstruct(graph, [customer]))
-            routes[c_route_index].remove(c_index)
+            routes[c_route_index].pop(c_index)
             return Solution(routes)
     for neighbour, dist in sorted_neighbours:
         if neighbour == graph.depot:
@@ -133,7 +133,7 @@ def _relocate_one(graph, solution, customer):
             routes[n_route_index].insert(n_index, customer)
         else:
             routes[n_route_index].insert(n_index+1, customer)
-        routes[c_route_index].remove(c_index)
+        routes[c_route_index].pop(c_index)
         break
     return Solution(routes)
 
