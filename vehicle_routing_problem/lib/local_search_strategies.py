@@ -86,25 +86,44 @@ def _distance_on_route(graph, route, i, k):
     return sum(graph.costs[[route[ci], route[ci+1]]] for ci in range(i, k-1))
 
 
+def _is_loop(route):
+    """Check whether route is a loop"""
+    if len(route) > 2:
+        return False
+    if len(route) == 1:
+        return True
+    return route[0] == route[1]
+
+
+def _delete_loops(solution):
+    to_pop = []
+    for i in range(len(solution)):
+        if _is_loop(solution.routes[i]):
+            to_pop.append(i)
+    # delete in reverse order not to screw the indexing
+    for route_index in reversed(to_pop):
+        del solution.routes[route_index]
+    return solution
+
+
 def _relocate_one(customer, graph, objective, S, md=None):
     """Relocate single customer"""
     if customer == graph.depot:  # do not relocate depots
         return S
-    routes = list(S.routes)
     sorted_neighbours = graph.neighbours[customer]
-    c_route_index, c_index = S.find_route(customer)
-    if c_route_index is None:
-        # customer does not belong to any route. shouldn't happen
-        return None
     curr_best_O = objective(graph, S, md)
     for neighbour, dist in sorted_neighbours:
+        c_route_index, c_index = S.find_route(customer)
+        if c_route_index is None:
+            # customer does not belong to any route. shouldn't happen
+            raise IndexError('route for customer not found')
         if neighbour == graph.depot:
             # handle depot separately:
             # if there are free vehicles, create new route
             # else: skip depot -> can't relocate
-            if len(routes) >= graph.vehicle_number:
+            if len(S.routes) >= graph.vehicle_number:
                 continue
-            new_routes = copy.deepcopy(routes)
+            new_routes = copy.deepcopy(S.routes)
             new_routes.append(_reconstruct(graph, [customer]))
             new_routes[c_route_index].pop(c_index)
             new_S = Solution(new_routes)
@@ -117,12 +136,14 @@ def _relocate_one(customer, graph, objective, S, md=None):
         n_route_index, n_index = S.find_route(neighbour)
         if n_route_index is None:
             # neighbour does not belong to any route. shouldn't happen
-            return None
+            raise IndexError('route for customer\'s neighbour not found')
         if c_route_index == n_route_index:
             # no need to relocate within a single route
             continue
         customer_route = S.routes[c_route_index]
         neighbour_route = S.routes[n_route_index]
+        if _is_loop(customer_route) or _is_loop(neighbour_route):
+            continue
         # TODO: use objective instead of distance
         customer_distance = _distance_on_route(
             graph,
@@ -140,7 +161,7 @@ def _relocate_one(customer, graph, objective, S, md=None):
             # infeasible to relocate anything
             continue
         # found better
-        new_routes = copy.deepcopy(routes)
+        new_routes = copy.deepcopy(S.routes)
         if dist_customer_neighbour_prev < dist_customer_neighbour_next:
             new_routes[n_route_index].insert(n_index, customer)
         else:
@@ -149,10 +170,11 @@ def _relocate_one(customer, graph, objective, S, md=None):
         new_S = Solution(new_routes)
         if objective(graph, new_S, md) >= curr_best_O:  # infeasible to relocate
             continue
+        S = new_S
         if not satisfies_all_constraints(graph, new_S):
             continue
-        return new_S
-    return S
+        break
+    return _delete_loops(S)
 
 
 def relocate(graph, objective, solution, md=None):

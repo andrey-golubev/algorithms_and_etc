@@ -30,8 +30,8 @@ with import_from('../'):
     from lib.constraints import satisfies_all_constraints
 
 
-def construct_initial_solution(graph, ignore_constraints=False):
-    """Construct Initial Solution given a Graph object"""
+def _greedy_initial(graph, ignore_constraints=False):
+    """Construct initial solution greedily"""
     routes = []
     depot = graph.depot
     # TODO: optimize whole operation
@@ -58,20 +58,42 @@ def construct_initial_solution(graph, ignore_constraints=False):
                 updated_route.append(next_customer)
                 updated_route.append(depot)
                 updated_routes.append(updated_route)
-                if not satisfies_all_constraints(graph, Solution(updated_routes)):
-                    break
+                if not ignore_constraints:
+                    if not satisfies_all_constraints(graph, Solution(updated_routes)):
+                        break
                 visited.add(next_customer)
                 vehicle_route = updated_route[:len(updated_route) - 1]
                 route_capacity -= demand
             non_visited_customers -= visited
         vehicle_route.append(depot)
         routes.append(vehicle_route)
-
-    if not ignore_constraints:
-        if len(routes) > graph.vehicle_number:
-            raise ValueError('initial solution error: vehicle number exceeded')
-        # TODO: additional constraints
     return Solution(routes=routes)
+
+
+def _naive_initial(graph, ignore_constraints=False):
+    """Construct initial solution naively"""
+    routes = []
+    depot = graph.depot
+    non_visited_customers = {c for c in graph.customers if not c.is_depot}
+    while non_visited_customers:
+        customer = non_visited_customers.pop()
+        # construct single customer routes. don't mind vehicle limit
+        routes.append([depot, customer, depot])
+    return Solution(routes=routes)
+
+
+def construct_initial_solution(graph, objective, md=None, ignore_constraints=False):
+    """
+    Construct initial solution given a graph
+
+    1. Create naive solution
+    2. Use relocate to construct decent solution
+    3. Make solution feasible
+    """
+    S = _naive_initial(graph, ignore_constraints)
+    S = relocate(graph, objective, S, md)
+    # TODO: make solution feasible
+    return S
 
 
 def _methods():
@@ -89,12 +111,12 @@ def _do_method(method, graph, O, S, md=None):
 
 def local_search(graph, objective, solution, md=None):
     """Perform local search"""
-    single_thread = False
+    single_thread = True
     if single_thread:
         S_relocate = relocate(graph, objective, solution, md)
         S_two_opt = two_opt(graph, objective, solution, md)
-        O_two_opt = objective(graph, S_two_opt, md)
         O_relocate = objective(graph, S_relocate, md)
+        O_two_opt = objective(graph, S_two_opt, md)
         # slightly prefer relocate over 2-opt
         return S_relocate if O_relocate <= O_two_opt else S_two_opt
     else:

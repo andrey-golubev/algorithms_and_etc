@@ -80,6 +80,10 @@ def guided_local_search(graph, penalty_factor, max_iter):
         'f': []  # feature set
     }
     S = search.construct_initial_solution(graph, ignore_constraints=True)
+    # # fix naive initial solution
+    # S = search.relocate(graph, O, S, MD)
+    # if VERBOSE:
+    #     print('Satisfies all?', satisfies_all_constraints(graph, S))
     best_S = S
 
     if VERBOSE:
@@ -100,7 +104,6 @@ def guided_local_search(graph, penalty_factor, max_iter):
         best_S = S
         if VERBOSE and i % 50 == 0:
             print("O* so far:", O(graph, best_S, None))
-            visualize(best_S)
 
     if VERBOSE:
         progress.finish()
