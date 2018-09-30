@@ -24,6 +24,7 @@ with import_from('.'):
     from lib.graph import PenaltyMap
     import lib.search_utils as search
     from lib.visualize import visualize
+    from lib.constraints import satisfies_all_constraints
 
 
 def parse_args():
@@ -99,6 +100,7 @@ def guided_local_search(graph, penalty_factor, max_iter):
         best_S = S
         if VERBOSE and i % 50 == 0:
             print("O* so far:", O(graph, best_S, None))
+            visualize(best_S)
 
     if VERBOSE:
         progress.finish()
@@ -119,6 +121,7 @@ def main():
     if VERBOSE:
         print('O*={o}'.format(o=GlsObjective()(graph, S, None)))
         print('All served?', S.all_served(graph.customer_number))
+        print('Everything satisfied?', satisfies_all_constraints(graph, S))
         print('----- PERFORMANCE -----')
         print('VRP took {some} seconds'.format(some=elapsed))
         visualize(S)

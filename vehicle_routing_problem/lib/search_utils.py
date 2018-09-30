@@ -8,6 +8,7 @@ import unittest
 import concurrent.futures as futures
 import multiprocessing
 
+
 # local imports
 from contextlib import contextmanager
 @contextmanager
@@ -26,6 +27,7 @@ with import_from('../'):
     from lib.graph import Graph
     from lib.local_search_strategies import two_opt
     from lib.local_search_strategies import relocate
+    from lib.constraints import satisfies_all_constraints
 
 
 def construct_initial_solution(graph, ignore_constraints=False):
@@ -50,9 +52,16 @@ def construct_initial_solution(graph, ignore_constraints=False):
             for i, demand in unfulfilled_demands:
                 if demand > route_capacity:
                     continue
+                updated_route = vehicle_route
+                updated_routes = routes
                 next_customer = graph.costs[i]
+                updated_route.append(next_customer)
+                updated_route.append(depot)
+                updated_routes.append(updated_route)
+                if not satisfies_all_constraints(graph, Solution(updated_routes)):
+                    break
                 visited.add(next_customer)
-                vehicle_route.append(next_customer)
+                vehicle_route = updated_route[:len(updated_route) - 1]
                 route_capacity -= demand
             non_visited_customers -= visited
         vehicle_route.append(depot)

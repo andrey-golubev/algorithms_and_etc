@@ -84,7 +84,14 @@ class Solution(object):
         served_customers = set()
         for route in self.routes:
             served_customers |= {c.id for c in route}
-        return len(served_customers) == number_of_customers
+        return len(served_customers) >= number_of_customers
+
+    def ids(self):
+        """Return routes with customer.id as nodes"""
+        ids = []
+        for route in self._routes:
+            ids.append([c.id for c in route])
+        return ids
 
 
 class Objective(ABC):
