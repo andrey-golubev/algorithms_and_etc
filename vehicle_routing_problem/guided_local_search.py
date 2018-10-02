@@ -72,12 +72,12 @@ def guided_local_search(graph, penalty_factor, max_iter):
     # MD - method specific supplementary data
 
     # some progressbar to show how method is doing
-    progress = progressbar.ProgressBar(
-        maxval=max_iter,
-        widgets=[
-            progressbar.Bar('=', '[', ']'),
-            ' ',
-            progressbar.Percentage()])
+    # progress = progressbar.ProgressBar(
+    #     maxval=max_iter,
+    #     widgets=[
+    #         progressbar.Bar('=', '[', ']'),
+    #         ' ',
+    #         progressbar.Percentage()])
 
     O = GlsObjective()
     MD = {
@@ -93,11 +93,11 @@ def guided_local_search(graph, penalty_factor, max_iter):
 
     if VERBOSE:
         print('O = {o}'.format(o=O(graph, S, None)))
-        progress.start()
+        # progress.start()
 
     for i in range(max_iter):
-        if VERBOSE:
-            progress.update(i+1)
+        # if VERBOSE:
+            # progress.update(i+1)
         MD['f'] = search.choose_penalty_features(graph, S, MD)
         for a, b in MD['f']:
             MD['p'][[a, b]] += 1
@@ -113,8 +113,8 @@ def guided_local_search(graph, penalty_factor, max_iter):
         if VERBOSE and i % 50 == 0:
             print("O* so far:", O(graph, best_S, None))
 
-    if VERBOSE:
-        progress.finish()
+    # if VERBOSE:
+        # progress.finish()
 
     # final LS with no penalties to get true local min
     return search.local_search(graph, O, best_S, None)
