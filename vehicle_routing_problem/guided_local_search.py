@@ -81,6 +81,8 @@ def guided_local_search(graph, penalty_factor, max_iter):
         'ignore_feasibility': False
     }
     S = search.construct_initial_solution(graph, O, MD)
+    if not satisfies_all_constraints(graph, S):
+        raise ValueError("couldn't find satisfying initial solution")
     best_S = S
 
     if VERBOSE:

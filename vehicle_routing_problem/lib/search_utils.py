@@ -30,10 +30,13 @@ with import_from('../'):
     from lib.local_search_strategies import two_opt
     from lib.local_search_strategies import relocate
     from lib.constraints import satisfies_all_constraints
+    from lib.constraints import route_satisfies_constraints
     from lib.constraints import find_capacity_violations, find_time_violations
 
 
 def _reconstruct(graph, route):
+    if not route:
+        raise ValueError('empty route')
     if not route[0] == graph.depot:
         route.insert(0, graph.depot)
     if not route[-1] == graph.depot:
@@ -42,45 +45,6 @@ def _reconstruct(graph, route):
 
 
 # initial solution
-def _greedy_initial(graph):
-    """Construct initial solution greedily"""
-    routes = []
-    depot = graph.depot
-    # TODO: optimize whole operation
-    non_visited_customers = {c for c in graph.customers if not c.is_depot}
-    for _ in range(graph.vehicle_number):
-        if not non_visited_customers:
-            break
-        if len(routes) == graph.vehicle_number:
-            break
-        vehicle_route = [depot]
-        route_capacity = float(graph.capacity)
-        unfulfilled_demands = sorted(
-            [(c.id, c.demand) for c in graph.customers if c in non_visited_customers],
-            key=lambda x: x[1],
-            reverse=True)
-        while non_visited_customers and (route_capacity >= unfulfilled_demands[-1][1]):
-            visited = set()
-            for i, demand in unfulfilled_demands:
-                if demand > route_capacity:
-                    continue
-                updated_route = vehicle_route
-                updated_routes = routes
-                next_customer = graph.costs[i]
-                updated_route.append(next_customer)
-                updated_route.append(depot)
-                updated_routes.append(updated_route)
-                if not satisfies_all_constraints(graph, Solution(updated_routes)):
-                    break
-                visited.add(next_customer)
-                vehicle_route = updated_route[:len(updated_route) - 1]
-                route_capacity -= demand
-            non_visited_customers -= visited
-        vehicle_route.append(depot)
-        routes.append(vehicle_route)
-    return Solution(routes=routes)
-
-
 def _naive_initial(graph):
     """Construct initial solution naively"""
     routes = []
@@ -93,36 +57,62 @@ def _naive_initial(graph):
     return Solution(routes=routes)
 
 
+def _unfulfilled_demands(graph, non_visited_customers):
+    """
+    Return unfulfilled customers and their demands in descending order
+    """
+    return sorted(
+        [c for c in graph.customers if c in non_visited_customers],
+        key=lambda c: c.demand,
+        reverse=True)
+
+
 def _average_capacity_initial(graph):
     """Construct initial solution maintaining average capacity per route"""
+    avg_cap = graph.avg_capacity
     routes = []
     non_visited_customers = {c for c in graph.customers if not c.is_depot}
     for _ in range(graph.vehicle_number):
         if not non_visited_customers:
             break
-        vehicle_route = []
-        route_capacity = float(graph.capacity)
-        unfulfilled_demands = sorted(
-            [(c.id, c.demand) for c in graph.customers if c in non_visited_customers],
-            key=lambda x: x[1],
-            reverse=True)
-        while non_visited_customers and (route_capacity >= unfulfilled_demands[-1][1]):
-            visited = set()
-            for i, demand in unfulfilled_demands:
-                if demand > route_capacity:
+        vehicle_route = []  # current route
+        route_cap = float(graph.capacity)  # current route capacity
+        route_fulfilled_cap = float(0)
+        non_wanted_customers = set()  # all not wanted in current iteration
+        while non_visited_customers and route_fulfilled_cap < avg_cap:
+            visited = set()  # visited customers so far
+            if non_wanted_customers == non_visited_customers:
+                # cannot add anyone: finish current iteration
+                break
+            demands = _unfulfilled_demands(graph, non_visited_customers)
+            if demands and route_cap < demands[-1].demand:
+                break
+            while demands:  # if there's anyone to add
+                next_customer = demands.pop(0)
+                demand = next_customer.demand
+                if demand > route_cap:  # violates capacity constraint
                     continue
-                updated_route = vehicle_route
-                updated_routes = routes
-                next_customer = graph.costs[i]
-                updated_route.append(next_customer)
-                updated_route.append(graph.depot)
-                updated_routes.append(updated_route)
-                if not satisfies_all_constraints(graph, Solution(updated_routes)):
-                    break
-                visited.add(next_customer)
-                vehicle_route = updated_route[:len(updated_route) - 1]
-                route_capacity -= demand
+                new_route = copy.deepcopy(vehicle_route)
+                new_route.append(next_customer)
+                satisfies = route_satisfies_constraints(
+                    graph, _reconstruct(graph, new_route))
+                if not satisfies and route_fulfilled_cap < avg_cap:
+                    # if constraints violated and route does not fulfill
+                    # average capacity, "reconsider" route nodes
+                    # => remove last customer and find better fit
+                    cancelled_customer = vehicle_route.pop()
+                    non_wanted_customers.add(cancelled_customer)
+                    route_cap += cancelled_customer.demand
+                if satisfies:
+                    # add new customer to current route
+                    visited.add(next_customer)
+                    vehicle_route.append(next_customer)
+                    route_cap -= demand
+                    route_fulfilled_cap += demand
             non_visited_customers -= visited
+        # add not wanted back to not visited
+        non_visited_customers |= non_wanted_customers
+        # construct new route
         routes.append(_reconstruct(graph, vehicle_route))
     return Solution(routes=routes)
 
@@ -201,7 +191,7 @@ def _INTERNAL_construct_initial_solution(graph, objective, md=None):
         md['ignore_feasibility'] = True
     S = relocate(graph, objective, S, md)
     S = _make_feasible(graph, S)
-    S = relocate(graph, objective, S, md)
+    # S = relocate(graph, objective, S, md)
     return S
 
 
@@ -266,7 +256,7 @@ C108_shortened_x10
 
 VEHICLE
 NUMBER     CAPACITY
-3         50
+5         50
 
 CUSTOMER
 CUST NO.   XCOORD.   YCOORD.   DEMAND    READY TIME   DUE DATE   SERVICE TIME
@@ -302,15 +292,14 @@ CUST NO.   XCOORD.   YCOORD.   DEMAND    READY TIME   DUE DATE   SERVICE TIME
         S = construct_initial_solution(self.graph, self.obj)
         if SearchUtilsTests.VERBOSE:
             print(S)
-        self.assertTrue(S)
+        self.assertTrue(S.routes)
+        self.assertTrue(S.all_served(self.graph.customer_number))
 
     def test_local_search_works(self):
         S = construct_initial_solution(self.graph, self.obj)
         S_opt = local_search(self.graph, self.obj, S, None)
+        self.assertTrue(S.routes)
         self.assertTrue(S_opt.all_served(self.graph.customer_number))
-        # self.assertNotEqual(
-            # S, S_opt,
-            # msg='{S1} == {S2}'.format(S1=str(S), S2=str(S_opt)))
         if SearchUtilsTests.VERBOSE:
             print(S)
             print(S_opt)
