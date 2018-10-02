@@ -105,7 +105,8 @@ class Matrix(object):
         """Overload for operator[] getter"""
         if isinstance(key, int):  # return customer by index
             return list(self.elements.keys())[key]
-        if isinstance(key, list):  # return specific cost per customer
+        if isinstance(key, list) or isinstance(key, tuple):
+            # return specific cost
             key_0, key_1 = key[0], key[1]
             if isinstance(key_0, Customer):
                 key_0, key_1 = key_0.id, key_1.id
@@ -114,7 +115,8 @@ class Matrix(object):
 
     def __setitem__(self, key, value):
         """Overload for operator[] setter"""
-        if isinstance(key, list):  # set specific cost for customer
+        if isinstance(key, list) or isinstance(key, tuple):
+            # set specific cost for customer
             key_0, key_1 = key[0], key[1]
             if isinstance(key_0, Customer):
                 key_0, key_1 = key_0.id, key_1.id

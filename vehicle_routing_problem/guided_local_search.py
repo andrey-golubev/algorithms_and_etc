@@ -47,14 +47,14 @@ class GlsObjective(Objective):
         """Calculate overall distance"""
         s = 0
         for route in solution:
-            s += sum(graph.costs[[route[i], route[i+1]]] for i in range(len(route)-1))
+            s += sum(graph.costs[(route[i], route[i+1])] for i in range(len(route)-1))
         return s
 
     def __call__(self, graph, solution, md):
         """operator() overload"""
         value = self._distance(graph, solution)
         if md and md['f']:
-            value += md['lambda'] * sum([md['p'][[a, b]] * graph.costs[[a, b]] for a, b in md['f']])
+            value += md['lambda'] * sum([md['p'][(a, b)] * graph.costs[(a, b)] for a, b in md['f']])
         return value
 
 

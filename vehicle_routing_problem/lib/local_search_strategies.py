@@ -83,7 +83,7 @@ def _distance_on_route(graph, route, i, k):
     """
     if i < 0 or len(route) < k:
         raise ValueError('i < 0 or len(route) < k')
-    return sum(graph.costs[[route[ci], route[ci+1]]] for ci in range(i, k-1))
+    return sum(graph.costs[(route[ci], route[ci+1])] for ci in range(i, k-1))
 
 
 def _is_loop(route):
@@ -158,8 +158,8 @@ def _relocate_one(customer, graph, objective, S, md=None):
             customer_route,
             c_index-1,
             c_index+1)
-        dist_customer_neighbour_prev = dist + graph.costs[[customer, neighbour_route[n_index-1]]]
-        dist_customer_neighbour_next = dist + graph.costs[[customer, neighbour_route[n_index+1]]]
+        dist_customer_neighbour_prev = dist + graph.costs[(customer, neighbour_route[n_index-1])]
+        dist_customer_neighbour_next = dist + graph.costs[(customer, neighbour_route[n_index+1])]
         if customer_distance < dist_customer_neighbour_prev and customer_distance < dist_customer_neighbour_next:
             # infeasible to relocate anything
             continue
@@ -279,7 +279,7 @@ def distance(graph, solution, md):
     del md
     s = 0
     for route in solution:
-        s += sum(graph.costs[[route[i], route[i+1]]] for i in range(len(route)-1))
+        s += sum(graph.costs[(route[i], route[i+1])] for i in range(len(route)-1))
     return s
 
 
