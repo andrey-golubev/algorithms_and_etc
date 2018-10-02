@@ -161,7 +161,7 @@ class Graph(object):
     def __init__(self, io_stream):
         """Init method"""
         _name, number, cap, input_data = Graph.parse_instance(io_stream)
-        self._instance_name = _name
+        self._instance_name = _name.lower()
         self._v_number = number
         self._v_capacity = cap
         # input data processing:
@@ -182,6 +182,11 @@ class Graph(object):
     def name(self):
         """Instance name"""
         return self._instance_name
+
+    @name.setter
+    def name(self, value):
+        """Instance name setter"""
+        self._instance_name = value
 
     @property
     def capacity(self):

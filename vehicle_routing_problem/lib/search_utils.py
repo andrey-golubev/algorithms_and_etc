@@ -216,7 +216,7 @@ def _do_method(method, graph, O, S, md=None):
 
 def local_search(graph, objective, solution, md=None):
     """Perform local search"""
-    single_thread = True
+    single_thread = False
     if single_thread:
         S_relocate = relocate(graph, objective, solution, md)
         S_two_opt = two_opt(graph, objective, solution, md)

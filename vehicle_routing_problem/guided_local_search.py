@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import os
 import sys
 import time
 import progressbar
@@ -25,19 +26,24 @@ with import_from('.'):
     import lib.search_utils as search
     from lib.visualize import visualize
     from lib.constraints import satisfies_all_constraints
+    from lib.generate_output import generate_sol
 
 
 def parse_args():
     """Parse command-line arguments"""
     parser = argparse.ArgumentParser("")
-    parser.add_argument('instance',
-        help='Vehicle Routing Problem instance file')
+    parser.add_argument('instances',
+        nargs='+',
+        help='Vehicle Routing Problem instance file(s)')
     parser.add_argument('--max_iter',
         help='Guided Local Search max iterations',
         default=2000)
     parser.add_argument('--penalty_factor',
         help='A penalty factor in objective function (works: 0.1, 0.2, 0.3)',
         default=0.2)
+    parser.add_argument('--sol',
+        action='store_true',
+        help='Specifies, whether solution files needs to be generated')
     return parser.parse_args()
 
 
@@ -86,7 +92,7 @@ def guided_local_search(graph, penalty_factor, max_iter):
     best_S = S
 
     if VERBOSE:
-        print('O={o}'.format(o=O(graph, S, None)))
+        print('O = {o}'.format(o=O(graph, S, None)))
         progress.start()
 
     for i in range(max_iter):
@@ -99,8 +105,10 @@ def guided_local_search(graph, penalty_factor, max_iter):
         if O(graph, S, None) >= O(graph, best_S, None):
             # due to deterministic behavior of the local search, once objective
             # function stops decresing, best solution found
-            break
-        best_S = S
+            # break
+            pass
+        else:
+            best_S = S
 
         if VERBOSE and i % 50 == 0:
             print("O* so far:", O(graph, best_S, None))
@@ -115,19 +123,26 @@ def guided_local_search(graph, penalty_factor, max_iter):
 def main():
     """Main entry point"""
     args = parse_args()
-    graph = None
-    with open(args.instance) as instance_file:
-        graph = Graph(instance_file)
-    start = time.time()
-    S = guided_local_search(graph, args.penalty_factor, args.max_iter)
-    elapsed = time.time() - start
-    if VERBOSE:
-        print('O*={o}'.format(o=GlsObjective()(graph, S, None)))
-        print('All served?', S.all_served(graph.customer_number))
-        print('Everything satisfied?', satisfies_all_constraints(graph, S))
-        print('----- PERFORMANCE -----')
-        print('VRP took {some} seconds'.format(some=elapsed))
-        visualize(S)
+    for instance in args.instances:
+        graph = None
+        with open(instance) as instance_file:
+            graph = Graph(instance_file)
+            graph.name = os.path.splitext(os.path.basename(instance))[0]
+        start = time.time()
+        S = guided_local_search(graph, args.penalty_factor, args.max_iter)
+        elapsed = time.time() - start
+        if VERBOSE:
+            print('-'*100)
+            print('File: {name}.txt'.format(name=graph.name))
+            print('O* = {o}'.format(o=GlsObjective()(graph, S, None)))
+            print('All served?', S.all_served(graph.customer_number))
+            print('Everything satisfied?', satisfies_all_constraints(graph, S))
+            print('----- PERFORMANCE -----')
+            print('GLS took {some} seconds'.format(some=elapsed))
+            print('-'*100)
+            # visualize(S)
+        if args.sol:
+            generate_sol(graph, S, cwd=os.path.dirname(os.path.abspath(__file__)))
     return 0
 
 
