@@ -155,12 +155,12 @@ def iterated_local_search(graph, factor, max_iter):
     # MD - method specific supplementary data
 
     # some progressbar to show how method is doing
-    progress = progressbar.ProgressBar(
-        maxval=max_iter,
-        widgets=[
-            progressbar.Bar('=', '[', ']'),
-            ' ',
-            progressbar.Percentage()])
+    # progress = progressbar.ProgressBar(
+    #     maxval=max_iter,
+    #     widgets=[
+    #         progressbar.Bar('=', '[', ']'),
+    #         ' ',
+    #         progressbar.Percentage()])
 
     O = IlsObjective()
     MD = {
@@ -176,11 +176,11 @@ def iterated_local_search(graph, factor, max_iter):
 
     if VERBOSE:
         print('O = {o}'.format(o=O(graph, S, None)))
-        progress.start()
+        # progress.start()
 
     for i in range(max_iter):
-        if VERBOSE:
-            progress.update(i+1)
+        # if VERBOSE:
+            # progress.update(i+1)
         S = _perturbation(graph, O, S, MD)
         S = search.local_search(graph, O, S, None)
 
@@ -195,8 +195,8 @@ def iterated_local_search(graph, factor, max_iter):
             continue
         best_S = S
 
-    if VERBOSE:
-        progress.finish()
+    # if VERBOSE:
+        # progress.finish()
 
     # final LS with no penalties to get true local min
     return search.local_search(graph, O, best_S, None)
