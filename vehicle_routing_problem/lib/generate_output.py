@@ -1,9 +1,10 @@
 import os
 
-def generate_sol(graph, solution, cwd):
+def generate_sol(graph, solution, cwd, prefix=''):
     """Generate <instance name>.sol"""
     filename = '{name}.sol'.format(name=graph.name)
-    filepath = os.path.join(os.path.abspath(cwd), '_logs')
+    filepath = os.path.join(
+        os.path.abspath(cwd), '{pre}logs'.format(pre=prefix))
     try:
         os.makedirs(filepath)
     except:
