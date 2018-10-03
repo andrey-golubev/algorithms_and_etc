@@ -100,7 +100,7 @@ def guided_local_search(graph, penalty_factor, max_iter):
             # progress.update(i+1)
         MD['f'] = search.choose_penalty_features(graph, S, MD)
         for a, b in MD['f']:
-            MD['p'][[a, b]] += 1
+            MD['p'][(a, b)] += 1
         S = search.local_search(graph, O, S, MD)
         if O(graph, S, None) >= O(graph, best_S, None):
             # due to deterministic behavior of the local search, once objective
@@ -123,6 +123,8 @@ def guided_local_search(graph, penalty_factor, max_iter):
 def main():
     """Main entry point"""
     args = parse_args()
+    if VERBOSE:
+        print(args.instances)
     for instance in args.instances:
         graph = None
         with open(instance) as instance_file:
