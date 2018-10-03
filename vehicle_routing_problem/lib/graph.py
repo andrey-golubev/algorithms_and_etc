@@ -35,10 +35,7 @@ class Solution(object):
 
     def __str__(self):
         """Serialize solution"""
-        routes = []
-        for route in self.routes:
-            routes.append([c.id for c in route])
-        return routes.__str__()
+        return self.ids().__str__()
 
     def __getitem__(self, key):
         """Return route by key(index)"""
@@ -84,8 +81,22 @@ class Solution(object):
         served_customers = set()
         for route in self.routes:
             served_customers |= {c.id for c in route}
-        return len(served_customers) == number_of_customers
+        return len(served_customers) >= number_of_customers
 
+    def ids(self):
+        """Return routes with customer.id as nodes"""
+        ids = []
+        for route in self._routes:
+            ids.append([c.id for c in route])
+        return ids
+
+    def append(self, routes):
+        """Append route to solution"""
+        for route in routes:
+            if not isinstance(route, list):
+                continue
+            self._routes.append(route)
+        return self
 
 class Objective(ABC):
     """Objective function interface"""
@@ -150,9 +161,9 @@ class Graph(object):
     def __init__(self, io_stream):
         """Init method"""
         _name, number, cap, input_data = Graph.parse_instance(io_stream)
-        self.instance_name = _name
-        self.v_number = number
-        self.vehicle_capacity = cap
+        self._instance_name = _name.lower()
+        self._v_number = number
+        self._v_capacity = cap
         # input data processing:
         # expecting full graph!
         self._input_data = input_data
@@ -165,20 +176,27 @@ class Graph(object):
                 [(other, self.cost_map[[customer, other]]) \
                     for other in self.customers if other != customer],
                 key=lambda x: x[1])
+        self._avg_cap = sum(c.demand for c in self.customers) / self._v_number
 
     @property
     def name(self):
         """Instance name"""
-        return self.instance_name
+        return self._instance_name
+
+    @name.setter
+    def name(self, value):
+        """Instance name setter"""
+        self._instance_name = value
 
     @property
     def capacity(self):
         """Vehicle capacity"""
-        return self.vehicle_capacity
+        return self._v_capacity
 
     @property
     def vehicle_number(self):
-        return self.v_number
+        """Number of vehicles"""
+        return self._v_number
 
     @property
     def costs(self):
@@ -192,22 +210,28 @@ class Graph(object):
 
     @property
     def depot(self):
-        """Return depot"""
+        """Depot"""
         return self.costs.depot
 
     @property
     def customers(self):
-        """Return customers"""
+        """All customers"""
         return self.costs.customers.keys()
 
     @property
     def raw_data(self):
-        """Return raw input data"""
+        """Raw input data"""
         return self._input_data
 
     @property
     def neighbours(self):
+        """Map of neighbours of each customer"""
         return self._neighbours_map
+
+    @property
+    def avg_capacity(self):
+        """Average capacity of each route"""
+        return self._avg_cap
 
     def __len__(self):
         """Number of customers"""
@@ -221,9 +245,9 @@ customer: #num={c_num}
 costs:
 {cost_map}
 """.format(
-            name=self.instance_name,
+            name=self.name,
             v_num=self.vehicle_number,
-            capacity=self.vehicle_capacity,
+            capacity=self.capacity,
             c_num=self.customer_number,
             cost_map=[],
             #cost_map=self.cost_map
