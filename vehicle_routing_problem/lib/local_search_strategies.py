@@ -161,7 +161,7 @@ def _relocate_one(customer, graph, objective, S, md=None):
         dist_customer_neighbour_prev = dist + graph.costs[(customer, neighbour_route[n_index-1])]
         dist_customer_neighbour_next = dist + graph.costs[(customer, neighbour_route[n_index+1])]
         if customer_distance < dist_customer_neighbour_prev and customer_distance < dist_customer_neighbour_next:
-            # infeasible to relocate anything
+            # no need to relocate anything
             continue
         # found better
         new_routes = copy.deepcopy(S.routes)
@@ -171,7 +171,7 @@ def _relocate_one(customer, graph, objective, S, md=None):
             new_routes[n_route_index].insert(n_index+1, customer)
         new_routes[c_route_index].pop(c_index)
         new_S = Solution(new_routes)
-        if objective(graph, new_S, md) >= curr_best_O:  # infeasible to relocate
+        if objective(graph, new_S, md) >= curr_best_O:  # no need to relocate
             continue
         if ignore:
             S = new_S

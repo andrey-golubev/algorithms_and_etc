@@ -38,7 +38,7 @@ def parse_args():
     parser.add_argument('--max-iter',
         help='Guided Local Search max iterations',
         default=2000)
-    parser.add_argument('--penalty_factor',
+    parser.add_argument('--penalty-factor',
         help='A penalty factor in objective function (works: 0.1, 0.2, 0.3)',
         default=0.2)
     parser.add_argument('--no-sol',
@@ -62,6 +62,24 @@ class GlsObjective(Objective):
         if md and md['f']:
             value += md['lambda'] * sum([md['p'][(a, b)] * graph.costs[(a, b)] for a, b in md['f']])
         return value
+
+
+# penalties
+def _choose_current_features(graph, solution, md):
+    """Choose features to penalize"""
+    edges = []
+    for route in solution:
+        for i in range(len(route)-1):
+            edges.append((route[i], route[i+1]))
+    return edges
+
+
+def _most_utilized_feature(graph, md):
+    """Choose feature that has the highest utility function value"""
+    return sorted(
+        [((a, b), graph.costs[(a, b)] / (md['p'][(a, b)] + 1)) for a, b in md['f']],
+        key=lambda x: x[1],
+        reverse=True)[0][0]
 
 
 def guided_local_search(graph, penalty_factor, max_iter):
@@ -98,19 +116,20 @@ def guided_local_search(graph, penalty_factor, max_iter):
     for i in range(max_iter):
         # if VERBOSE:
             # progress.update(i+1)
-        MD['f'] = search.choose_penalty_features(graph, S, MD)
-        for a, b in MD['f']:
-            MD['p'][(a, b)] += 1
+        MD['f'] = _choose_current_features(graph, S, MD)
+        most_utilized = _most_utilized_feature(graph, MD)
+        MD['p'][most_utilized] += 1
         S = search.local_search(graph, O, S, MD)
+
+        if VERBOSE and i % 10 == 0:
+            print("O* so far:", O(graph, best_S, None))
+
         if O(graph, S, None) >= O(graph, best_S, None):
             # due to deterministic behavior of the local search, once objective
             # function stops decresing, best solution found
             break
         else:
             best_S = S
-
-        if VERBOSE and i % 10 == 0:
-            print("O* so far:", O(graph, best_S, None))
 
     # if VERBOSE:
         # progress.finish()
@@ -126,7 +145,7 @@ def main():
         print(args.instances)
     for instance in args.instances:
         graph = None
-        with open(instance) as instance_file:
+        with open(instance, 'r') as instance_file:
             graph = Graph(instance_file)
             graph.name = os.path.splitext(os.path.basename(instance))[0]
         if VERBOSE:

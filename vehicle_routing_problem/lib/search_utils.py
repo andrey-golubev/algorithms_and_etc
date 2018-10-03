@@ -236,16 +236,6 @@ def local_search(graph, objective, solution, md=None):
         return sorted(results, key=lambda x: x[0])[0][1]
 
 
-def choose_penalty_features(graph, solution, md):
-    """Choose features to penalize upon given a solution"""
-    edges = []
-    for route in solution:
-        for i in range(len(route)-1):
-            edges.append((route[i], route[i+1]))
-    return edges
-
-
-
 
 # Unit Tests
 class SearchUtilsTests(unittest.TestCase):
