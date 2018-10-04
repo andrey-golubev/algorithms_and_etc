@@ -23,7 +23,7 @@ def generate_sol(graph, solution, cwd, prefix=''):
                 next_c = route[i]
                 spent_time_on_c = start_time + c.service_time
                 spent_time_on_c += graph.costs[(c, next_c)]
-                # decide whether we wait or start right after we arrive
+                # decide whether we start right after we arrive or wait
                 start_time = max(spent_time_on_c, next_c.ready_time)
                 route_str += pattern.format(id=next_c.id, start=start_time)
             sol_file.write(route_str.strip())

@@ -30,8 +30,8 @@ def _satisfies_time_constraints(graph, solution, route_index=None):
             next_c = route[i+1]
             spent_time_on_c = start_time + c.service_time
             spent_time_on_c += graph.costs[(c, next_c)]
-            # decide whether we wait or start right after we arrive
-            start_time = max(start_time, spent_time_on_c)
+            # decide whether we start right after we arrive or wait
+            start_time = max(spent_time_on_c, next_c.ready_time)
             spent_time_on_c += next_c.service_time
             if spent_time_on_c > next_c.due_date:
                 return False
