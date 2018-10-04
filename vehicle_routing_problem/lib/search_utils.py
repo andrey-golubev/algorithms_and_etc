@@ -32,7 +32,6 @@ with import_from('../'):
     from lib.local_search_strategies import exchange
     from lib.constraints import satisfies_all_constraints
     from lib.constraints import route_satisfies_constraints
-    from lib.constraints import find_capacity_violations, find_time_violations
 
 
 def _reconstruct(graph, route):
@@ -152,48 +151,6 @@ def _split_route_by_time(graph, route):
             routes.append(route[start:i+1])
             start = i+1
     return routes
-
-
-def _make_feasible(graph, S):
-    """
-    Make solution feasible
-
-    1. Find violations
-    2. Split route into separate to fulfill requirements
-    """
-    capacity_violations = find_capacity_violations(graph, S)
-    for ri, _ in reversed(capacity_violations):
-        del S.routes[ri]
-    for ri, route in capacity_violations:
-        routes = _split_route_by_capacity(graph, route)
-        S.append(routes)
-
-    # TODO: time violations
-    # time_violations = find_time_violations(graph, S)
-    # for ri, route in time_violations:
-    #     routes = _split_route_by_time(graph, route)
-    #     S.append(routes)
-    # for ri, _ in reversed(time_violations):
-    #     del S.routes[ri]
-    return S
-
-
-def _INTERNAL_construct_initial_solution(graph, objective, md=None):
-    """
-    Construct initial solution given a graph
-
-    1. Create naive solution
-    2. Use relocate to construct decent solution
-    3. Make solution feasible
-    """
-    S = _naive_initial(graph)
-    if md:
-        md = copy.deepcopy(md)
-        md['ignore_feasibility'] = True
-    S = relocate(graph, objective, S, md)
-    S = _make_feasible(graph, S)
-    # S = relocate(graph, objective, S, md)
-    return S
 
 
 def construct_initial_solution(graph, objective, md=None):
