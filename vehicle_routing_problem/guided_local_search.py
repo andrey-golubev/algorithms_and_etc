@@ -123,7 +123,7 @@ def guided_local_search(graph, penalty_factor, max_iter):
 
         if O(graph, S, None) >= O(graph, best_S, None):
             # due to deterministic behavior of the local search, once objective
-            # function stops decresing, best solution found
+            # function stops decreasing, best solution found
             break
         else:
             best_S = S
