@@ -6,7 +6,6 @@ import sys
 import time
 import progressbar
 import math
-import random
 import copy
 
 # local imports
@@ -29,6 +28,7 @@ with import_from('.'):
     from lib.visualize import visualize
     from lib.constraints import satisfies_all_constraints
     from lib.generate_output import generate_sol
+    from lib.local_search_strategies import swap_nodes
 
 
 def parse_args():
@@ -40,9 +40,6 @@ def parse_args():
     parser.add_argument('--max-iter',
         help='Iterated Local Search max iterations',
         default=2000)
-    parser.add_argument('--swap-factor',
-        help='A swap factor for perturbation',
-        default=0.4)
     parser.add_argument('--no-sol',
         action='store_true',
         help='Specifies, whether solution files needs to be generated')
@@ -51,103 +48,76 @@ def parse_args():
 
 class IlsObjective(Objective):
     """Iterated local search objective function"""
-    def _distance(self, graph, solution):
-        """Calculate overall distance"""
-        s = 0
-        for route in solution:
-            s += sum(graph.costs[(route[i], route[i+1])] for i in range(len(route)-1))
-        return s
-
-    def _route_distance(self, graph, route):
-        """Calculate route distance"""
-        return sum(graph.costs[(route[i], route[i+1])] for i in range(len(route)-1))
-
     def __call__(self, graph, solution, md):
         """operator() overload"""
-        if md and md['ri']:
+        if md and md.get('ri', None) is not None:
             return self._route_distance(graph, solution[md['ri']])
         return self._distance(graph, solution)
 
 
-def _sort_solution_by_objective(graph, O, S, history):
+def _sort_solution_by_objective(graph, O, S):
     """Sort routes by impact on objective function in descending order"""
-    return sorted([ri for ri in range(len(S)) if ri not in history],
+    return sorted([ri for ri in range(len(S))],
         key=lambda x: O(graph, S, {'ri': x}), reverse=True)
 
 
-def swap_nodes(route_a, route_b, ci_a, ci_b):
-    """
-    Swap node indexed ci_a with node indexed ci_b between corresponding routes
-
-    Note: this function *does not* swap in-place
-    """
-    a = copy.deepcopy(route_a)
-    b = copy.deepcopy(route_b)
-    tmp_c = copy.deepcopy(a[ci_a])
-    a[ci_a] = copy.deepcopy(b[ci_b])
-    b[ci_b] = tmp_c
-    return a, b
+def _make_history_tuple(i, j, r, k):
+    return tuple(sorted([i, j, r, k]))
 
 
 def _perturbation(graph, O, S, md):
-    """Perform perturbation on solution"""
-    # TODO: a good one is a 4-opt between routes
-    random.seed(a=11)
-    # history = md['history']
-    # number of swaps to perform
-    swaps = int(md['swap_factor'] * random.randint(2, len(S) - 1))
-    swaps = max(swaps, 1)
-
-    # TODO: sort doesn't seem necessary
-    # indices = _sort_solution_by_objective(graph, O, S, history)
-    indices = [ri for ri in range(len(S))]  # if ri not in history]
-    if len(indices) < 2:
-        # can't perform at least one swap
-        return S
-
-    random.shuffle(indices)  # shuffle to get random order
-    # perform as many swaps as possible
-    swaps = int(min(swaps, math.floor(len(indices) / 2)))
-    while indices and swaps:
-        # perform any swap operation between 2 routes
-        ri = indices.pop(0)
-        route = S[ri]
-        for i in range(len(indices)):
-            if not swaps:
+    """Perform perturbation between routes on solution"""
+    # sort by highest objective
+    # as O -> min, maximal values are bad
+    # we need to try to reduce max values / compensate
+    # this way LS can be guided towards a better solution
+    routes = _sort_solution_by_objective(graph, O, S)
+    four_opt_performed = False
+    while not four_opt_performed and routes:
+        ri_a = routes.pop(0)
+        route_a = S[ri_a]
+        for i in range(len(routes)):
+            if four_opt_performed:
                 break
-            next_ri = indices[i]
-            next_route = S[next_ri]
-            for ci in range(len(route)):
-                if route[ci] == graph.depot:
-                    continue
-                if ci in md['history']:
-                    continue
-                if not swaps:
+            ri_b = routes[i]
+            route_b = S[ri_b]
+            for ci_a in range(len(route_a) - 1):
+                if four_opt_performed:
                     break
-                for next_ci in range(len(next_route)):
-                    if next_route[next_ci] == graph.depot:
+                # skip depots
+                if route_a[ci_a] == graph.depot:
+                    continue
+                if route_a[ci_a + 1] == graph.depot:
+                    break
+                for ci_b in range(len(route_b) - 1):
+                    # skip depots
+                    if route_b[ci_b] == graph.depot:
                         continue
-                    if next_ci in md['history']:
+                    if route_b[ci_b + 1] == graph.depot:
+                        break
+                    if _make_history_tuple(ci_a, ci_a + 1, ci_b, ci_b + 1) in md['history']:
+                        # skip already swapped customers
                         continue
-                    # move = random.uniform(0, 1) >= 0.5
-                    # if not move:
-                        # continue
-                    new_route, new_next_route = swap_nodes(
-                        route, next_route, ci, next_ci)
-                    new_S = S.changed(new_route, ri)
-                    new_S = new_S.changed(new_next_route, next_ri)
+                    # reverse swap two customers from each route
+                    new_route_a, new_route_b = swap_nodes(
+                        route_a, route_b, ci_a, ci_b + 1)
+                    new_route_a, new_route_b = swap_nodes(
+                        new_route_a, new_route_b, ci_a + 1, ci_b)
+                    new_S = S.changed(new_route_a, ri_a)
+                    new_S = new_S.changed(new_route_b, ri_b)
                     satisfies = satisfies_all_constraints(graph, new_S)
                     if not satisfies:
                         continue
                     S = new_S
-                    swaps -= 1
-                    md['history'].add(ci)
-                    md['history'].add(next_ci)
+                    four_opt_performed = True
+                    # add current tuple of 4 customers to history
+                    md['history'].add(
+                        _make_history_tuple(ci_a, ci_a + 1, ci_b, ci_b + 1))
                     break
     return S
 
 
-def iterated_local_search(graph, factor, max_iter):
+def iterated_local_search(graph, max_iter):
     """Iterated local search algorithm"""
     # O - objective function
     # S - current solution
@@ -166,8 +136,6 @@ def iterated_local_search(graph, factor, max_iter):
     MD = {
         'ignore_feasibility': False,
         'history': set(),  # history of perturbation: swapped customers
-        # 'iter': max_iter * 0.05,  # number of iterations in perturbation
-        'swap_factor': factor  # swap paratemeter for perturbation
     }
     S = search.construct_initial_solution(graph, O, MD)
     if not satisfies_all_constraints(graph, S):
@@ -178,25 +146,31 @@ def iterated_local_search(graph, factor, max_iter):
         print('O = {o}'.format(o=O(graph, S, None)))
         # progress.start()
 
+    objective_unchanged = 0
+
     for i in range(max_iter):
         # if VERBOSE:
-            # progress.update(i+1)
+        #     progress.update(i+1)
         S = _perturbation(graph, O, S, MD)
         S = search.local_search(graph, O, S, None)
 
-        if VERBOSE and i % 10 == 0:
+        if VERBOSE and i % 200 == 0:
             print("O* so far:", O(graph, best_S, None))
 
         if S == best_S:
             # solution didn't change after perturbation + local search
             break
-        # MD['history'] = set()
+        if objective_unchanged > max_iter * 0.1:
+            # if 10% of iterations in a row there's no improvement, stop
+            break
         if O(graph, S, None) >= O(graph, best_S, None):
+            objective_unchanged += 1
             continue
+        objective_unchanged = 0
         best_S = S
 
     # if VERBOSE:
-        # progress.finish()
+    #     progress.finish()
 
     # final LS with no penalties to get true local min
     return search.local_search(graph, O, best_S, None)
@@ -216,7 +190,7 @@ def main():
             print('-'*100)
             print('File: {name}.txt'.format(name=graph.name))
         start = time.time()
-        S = iterated_local_search(graph, args.swap_factor, args.max_iter)
+        S = iterated_local_search(graph, args.max_iter)
         elapsed = time.time() - start
         if VERBOSE:
             print('O* = {o}'.format(o=IlsObjective()(graph, S, None)))

@@ -43,13 +43,13 @@ def _two_opt_on_route(graph, objective, solution, route_index, md):
     """Perform 2-opt strategy for single route"""
     # TODO: (verify that can optimize 0=>any) OR (do greedy: 0=>any and any'=>0)
     route = solution[route_index]
-    route = route[1:len(route)-1]  # remove back depot from search
+    route = route[1:len(route)-1]  # remove depot from search
     can_improve = True
     while can_improve:
         curr_best_O = objective(graph, solution, md)
         found_new_best = False
         for i in range(1, len(route) - 1):
-            if found_new_best:  # fast loop-break
+            if found_new_best:  # fast loop break
                 break
             for k in range(i + 1, len(route) - 1):
                 new_route = _two_opt_swap(route, i, k)
@@ -110,9 +110,6 @@ def _relocate_one(customer, graph, objective, S, md=None):
     """Relocate single customer"""
     if customer == graph.depot:  # do not relocate depots
         return S
-    ignore = False
-    if md:
-        ignore = md.get('ignore_feasibility', False)
     sorted_neighbours = graph.neighbours[customer]
     curr_best_O = objective(graph, S, md)
     for neighbour, dist in sorted_neighbours:
@@ -147,7 +144,6 @@ def _relocate_one(customer, graph, objective, S, md=None):
         neighbour_route = S.routes[n_route_index]
         if _is_loop(customer_route) or _is_loop(neighbour_route):
             continue
-        # TODO: use objective instead of distance
         customer_distance = _distance_on_route(
             graph,
             customer_route,
@@ -173,8 +169,6 @@ def _relocate_one(customer, graph, objective, S, md=None):
         new_S = Solution(new_routes)
         if objective(graph, new_S, md) >= curr_best_O:  # no need to relocate
             continue
-        if ignore:
-            S = new_S
         if not satisfies_all_constraints(graph, new_S):
             continue
         S = new_S
@@ -195,13 +189,68 @@ def relocate(graph, objective, solution, md=None):
 
 
 # [3] exchange operation
+def swap_nodes(route_a, route_b, ci_a, ci_b):
+    """
+    Swap node indexed ci_a with node indexed ci_b between corresponding routes
+
+    Note: this function *does not* swap in-place
+    """
+    a = copy.deepcopy(route_a)
+    b = copy.deepcopy(route_b)
+    tmp_c = copy.deepcopy(a[ci_a])
+    a[ci_a] = copy.deepcopy(b[ci_b])
+    b[ci_b] = tmp_c
+    return a, b
+
+
+def _sort_solution_by_objective(graph, O, S):
+    """Sort routes by impact on objective function in descending order"""
+    return sorted([ri for ri in range(len(S))],
+        key=lambda x: O(graph, S, {'ri': x}), reverse=True)
+
+
+def _exchange_one(customer, graph, objective, S, md=None):
+    """Swap single customer"""
+    if customer == graph.depot:  # do not relocate depots
+        return S
+    curr_best_O = objective(graph, S, md)
+    c_route_index, c_index = S.find_route(customer)
+    customer_route = S[c_route_index]
+    if c_route_index is None:
+        # customer does not belong to any route. shouldn't happen
+        raise IndexError('route for customer not found')
+
+    routes = _sort_solution_by_objective(graph, objective, S)
+    for ri in routes:
+        if ri == c_route_index:
+            # skip itself
+            continue
+        route = S[ri]
+        for i, other in enumerate(route):
+            if other == graph.depot:  # skip depot
+                continue
+            new_customer_route, new_route = swap_nodes(
+                customer_route, route, c_index, i)
+            new_S = S.changed(new_customer_route, c_route_index)
+            new_S = new_S.changed(new_route, ri)
+            if objective(graph, new_S, md) >= curr_best_O:
+                # no need to relocate
+                continue
+            if not satisfies_all_constraints(graph, new_S):
+                # infeasible
+                continue
+            return new_S
+    return S
+
+
 def exchange(graph, objective, solution, md=None):
     """
     Perform exchange operation on solution
 
     Swap customer visits in different vehicle routes
     """
-    # noop
+    for customer in graph.customers:
+        solution = _exchange_one(customer, graph, objective, solution, md)
     return Solution(solution.routes)
 
 

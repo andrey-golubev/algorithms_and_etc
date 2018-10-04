@@ -117,6 +117,18 @@ class Objective(ABC):
         del md
         return 0
 
+    def _distance(self, graph, solution):
+        """Calculate overall distance"""
+        s = 0
+        for route in solution:
+            s += sum(graph.costs[(route[i], route[i+1])] for i in range(len(route)-1))
+        return s
+
+    def _route_distance(self, graph, route):
+        """Calculate route distance"""
+        return sum(graph.costs[(route[i], route[i+1])] for i in range(len(route)-1))
+
+
 class CostMap(Matrix):
     """
     Costs between customers

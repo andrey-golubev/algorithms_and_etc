@@ -29,6 +29,7 @@ with import_from('../'):
     from lib.customer import Customer
     from lib.local_search_strategies import two_opt
     from lib.local_search_strategies import relocate
+    from lib.local_search_strategies import exchange
     from lib.constraints import satisfies_all_constraints
     from lib.constraints import route_satisfies_constraints
     from lib.constraints import find_capacity_violations, find_time_violations
@@ -205,7 +206,8 @@ def _methods():
     """Return available methods used in local search"""
     return {
         '2-opt': two_opt,
-        'relocate': relocate
+        'relocate': relocate,
+        'exchange': exchange
     }
 
 
@@ -217,23 +219,21 @@ def _do_method(method, graph, O, S, md=None):
 def local_search(graph, objective, solution, md=None):
     """Perform local search"""
     single_thread = False
+    methods = _methods()
+    results = []
     if single_thread:
-        S_relocate = relocate(graph, objective, solution, md)
-        S_two_opt = two_opt(graph, objective, solution, md)
-        O_relocate = objective(graph, S_relocate, md)
-        O_two_opt = objective(graph, S_two_opt, md)
-        # slightly prefer relocate over 2-opt
-        return S_relocate if O_relocate <= O_two_opt else S_two_opt
+        for method in methods.values():
+            S = method(graph, objective, solution, md)
+            results.append((objective(graph, S, md), S))
     else:
-        methods = _methods()
-        results = []
         with futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
             future_per_search_method = {executor.submit(_do_method, m, graph, objective, solution, md): name for name, m in methods.items()}
             for future in futures.as_completed(future_per_search_method):
                 results.append(future.result())
         if not results:
             raise Exception('Every method failed')
-        return sorted(results, key=lambda x: x[0])[0][1]
+    # get solution that gives best objective
+    return sorted(results, key=lambda x: x[0])[0][1]
 
 
 

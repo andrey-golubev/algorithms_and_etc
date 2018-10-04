@@ -49,18 +49,15 @@ def parse_args():
 
 class GlsObjective(Objective):
     """Guided local search objective function"""
-    def _distance(self, graph, solution):
-        """Calculate overall distance"""
-        s = 0
-        for route in solution:
-            s += sum(graph.costs[(route[i], route[i+1])] for i in range(len(route)-1))
-        return s
-
     def __call__(self, graph, solution, md):
         """operator() overload"""
         value = self._distance(graph, solution)
-        if md and md['f']:
-            value += md['lambda'] * sum([md['p'][(a, b)] * graph.costs[(a, b)] for a, b in md['f']])
+        if md:
+            if md.get('ri', None) is not None:
+                return self._route_distance(graph, solution[md['ri']])
+            if md['f']:
+                value += md['lambda'] * sum(
+                    [md['p'][(a, b)] * graph.costs[(a, b)] for a, b in md['f']])
         return value
 
 
@@ -121,7 +118,7 @@ def guided_local_search(graph, penalty_factor, max_iter):
         MD['p'][most_utilized] += 1
         S = search.local_search(graph, O, S, MD)
 
-        if VERBOSE and i % 10 == 0:
+        if VERBOSE and i % 200 == 0:
             print("O* so far:", O(graph, best_S, None))
 
         if O(graph, S, None) >= O(graph, best_S, None):
