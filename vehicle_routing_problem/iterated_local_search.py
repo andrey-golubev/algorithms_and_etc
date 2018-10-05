@@ -136,7 +136,6 @@ def iterated_local_search(graph, max_iter, time_limit):
             'ignore_feasibility': False,
             'history': set(),  # history of perturbation: swapped customers
         }
-        start = time.time()
         S = search.construct_initial_solution(graph, O, MD)
         if not satisfies_all_constraints(graph, S):
             raise ValueError("couldn't find satisfying initial solution")
@@ -147,6 +146,7 @@ def iterated_local_search(graph, max_iter, time_limit):
 
         objective_unchanged = 0
 
+        start = time.time()
         for i in range(max_iter):
             S = _perturbation(graph, O, S, MD)
             S = search.local_search(graph, O, S, None)
@@ -166,10 +166,11 @@ def iterated_local_search(graph, max_iter, time_limit):
             objective_unchanged = 0
             best_S = S
 
-        elapsed = time.time() - start  # in seconds
-        if elapsed > time_limit:  # > 45 minutes
-            print('- Timeout reached -')
-            raise TimeoutError('algorithm timeout reached')
+            # check timeout
+            elapsed = time.time() - start  # in seconds
+            if elapsed > time_limit:  # > 45 minutes
+                print('- Timeout reached -')
+                raise TimeoutError('algorithm timeout reached')
     except TimeoutError:
         pass  # supress timeout errors, expecting only from algo timeout
     finally:

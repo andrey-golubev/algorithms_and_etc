@@ -100,7 +100,6 @@ def guided_local_search(graph, penalty_factor, max_iter, time_limit):
             'f': [],  # feature set,
             'ignore_feasibility': False
         }
-        start = time.time()
         S = search.construct_initial_solution(graph, O, MD)
         if not satisfies_all_constraints(graph, S):
             raise ValueError("couldn't find satisfying initial solution")
@@ -109,6 +108,7 @@ def guided_local_search(graph, penalty_factor, max_iter, time_limit):
         if VERBOSE:
             print('O = {o}'.format(o=O(graph, S, None)))
 
+        start = time.time()
         for i in range(max_iter):
             MD['f'] = _choose_current_features(graph, S, MD)
             most_utilized = _most_utilized_feature(graph, MD)
@@ -123,10 +123,12 @@ def guided_local_search(graph, penalty_factor, max_iter, time_limit):
                 # function stops decreasing, best solution found
                 break
             best_S = S
-        elapsed = time.time() - start  # in seconds
-        if elapsed > time_limit:  # elapsed > 60 minutes
-            print('- Timeout reached -')
-            raise TimeoutError('algorithm timeout reached')
+
+            # check timeout
+            elapsed = time.time() - start  # in seconds
+            if elapsed > time_limit:  # elapsed > 60 minutes
+                print('- Timeout reached -')
+                raise TimeoutError('algorithm timeout reached')
     except TimeoutError:
         pass  # supress timeout errors, expecting only from algo timeout
     finally:
