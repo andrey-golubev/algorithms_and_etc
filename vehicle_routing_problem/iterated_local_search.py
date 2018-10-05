@@ -148,6 +148,13 @@ def iterated_local_search(graph, max_iter, time_limit):
 
         start = time.time()
         for i in range(max_iter):
+            # check timeout
+            elapsed = time.time() - start  # in seconds
+            if elapsed > time_limit:  # > 45 minutes
+                print('- Timeout reached -')
+                raise TimeoutError('algorithm timeout reached')
+
+            # main logic
             S = _perturbation(graph, O, S, MD)
             S = search.local_search(graph, O, S, None)
 
@@ -166,11 +173,6 @@ def iterated_local_search(graph, max_iter, time_limit):
             objective_unchanged = 0
             best_S = S
 
-            # check timeout
-            elapsed = time.time() - start  # in seconds
-            if elapsed > time_limit:  # > 45 minutes
-                print('- Timeout reached -')
-                raise TimeoutError('algorithm timeout reached')
     except TimeoutError:
         pass  # supress timeout errors, expecting only from algo timeout
     finally:

@@ -110,6 +110,13 @@ def guided_local_search(graph, penalty_factor, max_iter, time_limit):
 
         start = time.time()
         for i in range(max_iter):
+            # check timeout
+            elapsed = time.time() - start  # in seconds
+            if elapsed > time_limit:  # elapsed > 60 minutes
+                print('- Timeout reached -')
+                raise TimeoutError('algorithm timeout reached')
+
+            # main logic
             MD['f'] = _choose_current_features(graph, S, MD)
             most_utilized = _most_utilized_feature(graph, MD)
             MD['p'][most_utilized] += 1
@@ -124,11 +131,6 @@ def guided_local_search(graph, penalty_factor, max_iter, time_limit):
                 break
             best_S = S
 
-            # check timeout
-            elapsed = time.time() - start  # in seconds
-            if elapsed > time_limit:  # elapsed > 60 minutes
-                print('- Timeout reached -')
-                raise TimeoutError('algorithm timeout reached')
     except TimeoutError:
         pass  # supress timeout errors, expecting only from algo timeout
     finally:
