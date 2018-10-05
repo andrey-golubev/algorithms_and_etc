@@ -164,7 +164,7 @@ def _methods():
     return {
         '2-opt': two_opt,
         'relocate': relocate,
-        'exchange': exchange
+        # 'exchange': exchange
     }
 
 
