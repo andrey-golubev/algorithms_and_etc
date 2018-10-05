@@ -7,6 +7,7 @@ import time
 import progressbar
 import math
 import copy
+import time
 
 # local imports
 from contextlib import contextmanager
@@ -39,10 +40,15 @@ def parse_args():
         help='Vehicle Routing Problem instance file(s)')
     parser.add_argument('--max-iter',
         help='Iterated Local Search max iterations',
+        type=int,
         default=2000)
     parser.add_argument('--no-sol',
         action='store_true',
         help='Specifies, whether solution files needs to be generated')
+    parser.add_argument('--time-limit',
+        help='Algorithm time limit (in seconds)',
+        type=int,
+        default=60*60)
     return parser.parse_args()
 
 
@@ -117,63 +123,58 @@ def _perturbation(graph, O, S, md):
     return S
 
 
-def iterated_local_search(graph, max_iter):
+def iterated_local_search(graph, max_iter, time_limit):
     """Iterated local search algorithm"""
     # O - objective function
     # S - current solution
     # best_S <=> S*
     # MD - method specific supplementary data
-
-    # some progressbar to show how method is doing
-    # progress = progressbar.ProgressBar(
-    #     maxval=max_iter,
-    #     widgets=[
-    #         progressbar.Bar('=', '[', ']'),
-    #         ' ',
-    #         progressbar.Percentage()])
-
-    O = IlsObjective()
-    MD = {
-        'ignore_feasibility': False,
-        'history': set(),  # history of perturbation: swapped customers
-    }
-    S = search.construct_initial_solution(graph, O, MD)
-    if not satisfies_all_constraints(graph, S):
-        raise ValueError("couldn't find satisfying initial solution")
-    best_S = S
-
-    if VERBOSE:
-        print('O = {o}'.format(o=O(graph, S, None)))
-        # progress.start()
-
-    objective_unchanged = 0
-
-    for i in range(max_iter):
-        # if VERBOSE:
-        #     progress.update(i+1)
-        S = _perturbation(graph, O, S, MD)
-        S = search.local_search(graph, O, S, None)
-
-        if VERBOSE and i % 200 == 0:
-            print("O* so far:", O(graph, best_S, None))
-
-        if S == best_S:
-            # solution didn't change after perturbation + local search
-            break
-        if objective_unchanged > max_iter * 0.1:
-            # if 10% of iterations in a row there's no improvement, stop
-            break
-        if O(graph, S, None) >= O(graph, best_S, None):
-            objective_unchanged += 1
-            continue
-        objective_unchanged = 0
+    best_S = None
+    try:
+        O = IlsObjective()
+        MD = {
+            'ignore_feasibility': False,
+            'history': set(),  # history of perturbation: swapped customers
+        }
+        start = time.time()
+        S = search.construct_initial_solution(graph, O, MD)
+        if not satisfies_all_constraints(graph, S):
+            raise ValueError("couldn't find satisfying initial solution")
         best_S = S
 
-    # if VERBOSE:
-    #     progress.finish()
+        if VERBOSE:
+            print('O = {o}'.format(o=O(graph, S, None)))
 
-    # final LS with no penalties to get true local min
-    return search.local_search(graph, O, best_S, None)
+        objective_unchanged = 0
+
+        for i in range(max_iter):
+            S = _perturbation(graph, O, S, MD)
+            S = search.local_search(graph, O, S, None)
+
+            if VERBOSE and i % max_iter / 10 == 0:
+                print("O* so far:", O(graph, best_S, None))
+
+            if S == best_S:
+                # solution didn't change after perturbation + local search
+                break
+            if objective_unchanged > max_iter * 0.1:
+                # if 10% of iterations in a row there's no improvement, stop
+                break
+            if O(graph, S, None) >= O(graph, best_S, None):
+                objective_unchanged += 1
+                continue
+            objective_unchanged = 0
+            best_S = S
+
+        elapsed = time.time() - start  # in seconds
+        if elapsed > time_limit:  # > 45 minutes
+            print('- Timeout reached -')
+            raise TimeoutError('algorithm timeout reached')
+    except TimeoutError:
+        pass  # supress timeout errors, expecting only from algo timeout
+    finally:
+        # final LS just in case
+        return search.local_search(graph, O, best_S, None)
 
 
 def main():
@@ -190,7 +191,7 @@ def main():
             print('-'*100)
             print('File: {name}.txt'.format(name=graph.name))
         start = time.time()
-        S = iterated_local_search(graph, args.max_iter)
+        S = iterated_local_search(graph, args.max_iter, args.time_limit)
         elapsed = time.time() - start
         if VERBOSE:
             print('O* = {o}'.format(o=IlsObjective()(graph, S, None)))

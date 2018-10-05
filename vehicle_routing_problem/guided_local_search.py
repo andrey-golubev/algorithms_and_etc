@@ -6,6 +6,7 @@ import sys
 import time
 import progressbar
 import math
+import time
 
 # local imports
 from contextlib import contextmanager
@@ -37,6 +38,7 @@ def parse_args():
         help='Vehicle Routing Problem instance file(s)')
     parser.add_argument('--max-iter',
         help='Guided Local Search max iterations',
+        type=int,
         default=2000)
     parser.add_argument('--penalty-factor',
         help='A penalty factor in objective function (works: 0.1, 0.2, 0.3)',
@@ -44,6 +46,10 @@ def parse_args():
     parser.add_argument('--no-sol',
         action='store_true',
         help='Specifies, whether solution files needs to be generated')
+    parser.add_argument('--time-limit',
+        help='Algorithm time limit (in seconds)',
+        type=int,
+        default=60*60)
     return parser.parse_args()
 
 
@@ -79,60 +85,53 @@ def _most_utilized_feature(graph, md):
         reverse=True)[0][0]
 
 
-def guided_local_search(graph, penalty_factor, max_iter):
+def guided_local_search(graph, penalty_factor, max_iter, time_limit):
     """Guided local search algorithm"""
     # O - objective function
     # S - current solution
     # best_S <=> S*
     # MD - method specific supplementary data
+    best_S = None
+    try:
+        O = GlsObjective()
+        MD = {
+            'p': PenaltyMap(graph.raw_data),  # penalties
+            'lambda': penalty_factor,
+            'f': [],  # feature set,
+            'ignore_feasibility': False
+        }
+        start = time.time()
+        S = search.construct_initial_solution(graph, O, MD)
+        if not satisfies_all_constraints(graph, S):
+            raise ValueError("couldn't find satisfying initial solution")
+        best_S = S
 
-    # some progressbar to show how method is doing
-    # progress = progressbar.ProgressBar(
-    #     maxval=max_iter,
-    #     widgets=[
-    #         progressbar.Bar('=', '[', ']'),
-    #         ' ',
-    #         progressbar.Percentage()])
+        if VERBOSE:
+            print('O = {o}'.format(o=O(graph, S, None)))
 
-    O = GlsObjective()
-    MD = {
-        'p': PenaltyMap(graph.raw_data),  # penalties
-        'lambda': penalty_factor,
-        'f': [],  # feature set,
-        'ignore_feasibility': False
-    }
-    S = search.construct_initial_solution(graph, O, MD)
-    if not satisfies_all_constraints(graph, S):
-        raise ValueError("couldn't find satisfying initial solution")
-    best_S = S
+        for i in range(max_iter):
+            MD['f'] = _choose_current_features(graph, S, MD)
+            most_utilized = _most_utilized_feature(graph, MD)
+            MD['p'][most_utilized] += 1
+            S = search.local_search(graph, O, S, MD)
 
-    if VERBOSE:
-        print('O = {o}'.format(o=O(graph, S, None)))
-        # progress.start()
+            if VERBOSE and i % max_iter / 10 == 0:
+                print("O* so far:", O(graph, best_S, None))
 
-    for i in range(max_iter):
-        # if VERBOSE:
-            # progress.update(i+1)
-        MD['f'] = _choose_current_features(graph, S, MD)
-        most_utilized = _most_utilized_feature(graph, MD)
-        MD['p'][most_utilized] += 1
-        S = search.local_search(graph, O, S, MD)
-
-        if VERBOSE and i % 200 == 0:
-            print("O* so far:", O(graph, best_S, None))
-
-        if O(graph, S, None) >= O(graph, best_S, None):
-            # due to deterministic behavior of the local search, once objective
-            # function stops decreasing, best solution found
-            break
-        else:
+            if O(graph, S, None) >= O(graph, best_S, None):
+                # due to deterministic behavior of the local search, once objective
+                # function stops decreasing, best solution found
+                break
             best_S = S
-
-    # if VERBOSE:
-        # progress.finish()
-
-    # final LS with no penalties to get true local min
-    return search.local_search(graph, O, best_S, None)
+        elapsed = time.time() - start  # in seconds
+        if elapsed > time_limit:  # elapsed > 60 minutes
+            print('- Timeout reached -')
+            raise TimeoutError('algorithm timeout reached')
+    except TimeoutError:
+        pass  # supress timeout errors, expecting only from algo timeout
+    finally:
+        # final LS with no penalties to get true local min
+        return search.local_search(graph, O, best_S, None)
 
 
 def main():
@@ -149,7 +148,8 @@ def main():
             print('-'*100)
             print('File: {name}.txt'.format(name=graph.name))
         start = time.time()
-        S = guided_local_search(graph, args.penalty_factor, args.max_iter)
+        S = guided_local_search(
+            graph, args.penalty_factor, args.max_iter, args.time_limit)
         elapsed = time.time() - start
         if VERBOSE:
             print('O* = {o}'.format(o=GlsObjective()(graph, S, None)))

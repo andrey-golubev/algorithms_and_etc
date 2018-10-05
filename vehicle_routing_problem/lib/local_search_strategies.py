@@ -321,6 +321,7 @@ class TestGraph(object):
         self.vehicle_number = 100
         self.customer_number = 0
         self.vehicle_capacity = 100
+        self.capacity = 100
 
 
 def distance(graph, solution, md):
