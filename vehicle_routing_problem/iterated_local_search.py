@@ -197,7 +197,7 @@ def main():
             print('All served?', S.all_served(graph.customer_number))
             print('Everything satisfied?', satisfies_all_constraints(graph, S))
             print('----- PERFORMANCE -----')
-            print('GLS took {some} seconds'.format(some=elapsed))
+            print('ILS took {some} seconds'.format(some=elapsed))
             print('-'*100)
             # visualize(S)
         if not args.no_sol:
