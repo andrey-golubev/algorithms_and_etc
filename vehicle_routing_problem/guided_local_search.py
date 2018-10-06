@@ -21,6 +21,7 @@ def import_from(rel_path):
     sys.path.pop(0)
 
 with import_from('.'):
+    from lib.parser import basic_parser
     from lib.graph import Graph
     from lib.graph import Objective
     from lib.graph import PenaltyMap
@@ -28,29 +29,6 @@ with import_from('.'):
     from lib.visualize import visualize
     from lib.constraints import satisfies_all_constraints
     from lib.generate_output import generate_sol
-
-
-def parse_args():
-    """Parse command-line arguments"""
-    parser = argparse.ArgumentParser("")
-    parser.add_argument('instances',
-        nargs='+',
-        help='Vehicle Routing Problem instance file(s)')
-    parser.add_argument('--max-iter',
-        help='Guided Local Search max iterations',
-        type=int,
-        default=2000)
-    parser.add_argument('--penalty-factor',
-        help='A penalty factor in objective function (works: 0.1, 0.2, 0.3)',
-        default=0.2)
-    parser.add_argument('--no-sol',
-        action='store_true',
-        help='Specifies, whether solution files needs to be generated')
-    parser.add_argument('--time-limit',
-        help='Algorithm time limit (in seconds)',
-        type=int,
-        default=60*60)
-    return parser.parse_args()
 
 
 class GlsObjective(Objective):
@@ -85,7 +63,7 @@ def _most_utilized_feature(graph, md):
         reverse=True)[0][0]
 
 
-def guided_local_search(graph, penalty_factor, max_iter, time_limit):
+def guided_local_search(graph, penalty_factor, max_iter, time_limit, excludes):
     """Guided local search algorithm"""
     # O - objective function
     # S - current solution
@@ -120,7 +98,7 @@ def guided_local_search(graph, penalty_factor, max_iter, time_limit):
             MD['f'] = _choose_current_features(graph, S, MD)
             most_utilized = _most_utilized_feature(graph, MD)
             MD['p'][most_utilized] += 1
-            S = search.local_search(graph, O, S, MD)
+            S = search.local_search(graph, O, S, MD, excludes)
 
             if VERBOSE and i % max_iter / 10 == 0:
                 print("O* so far:", O(graph, best_S, None))
@@ -137,12 +115,17 @@ def guided_local_search(graph, penalty_factor, max_iter, time_limit):
         if best_S is None:
             return None
         # final LS with no penalties to get true local min
-        return search.local_search(graph, O, best_S, None)
+        return search.local_search(graph, O, best_S, None, excludes)
 
 
 def main():
     """Main entry point"""
-    args = parse_args()
+    parser = basic_parser()
+    # GLS extensions to parser
+    parser.add_argument('--penalty-factor',
+        help='A penalty factor in objective function (works: 0.1, 0.2, 0.3)',
+        default=0.2)
+    args = parser.parse_args()
     if VERBOSE:
         print(args.instances)
     for instance in args.instances:
@@ -155,7 +138,7 @@ def main():
             print('File: {name}.txt'.format(name=graph.name))
         start = time.time()
         S = guided_local_search(
-            graph, args.penalty_factor, args.max_iter, args.time_limit)
+            graph, args.penalty_factor, args.max_iter, args.time_limit, args.exclude_ls)
         elapsed = time.time() - start
         if VERBOSE:
             if S is None:

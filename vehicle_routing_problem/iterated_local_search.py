@@ -22,6 +22,7 @@ def import_from(rel_path):
     sys.path.pop(0)
 
 with import_from('.'):
+    from lib.parser import basic_parser
     from lib.graph import Graph
     from lib.graph import Objective
     from lib.graph import PenaltyMap
@@ -30,26 +31,6 @@ with import_from('.'):
     from lib.constraints import satisfies_all_constraints
     from lib.generate_output import generate_sol
     from lib.local_search_strategies import swap_nodes
-
-
-def parse_args():
-    """Parse command-line arguments"""
-    parser = argparse.ArgumentParser("")
-    parser.add_argument('instances',
-        nargs='+',
-        help='Vehicle Routing Problem instance file(s)')
-    parser.add_argument('--max-iter',
-        help='Iterated Local Search max iterations',
-        type=int,
-        default=2000)
-    parser.add_argument('--no-sol',
-        action='store_true',
-        help='Specifies, whether solution files needs to be generated')
-    parser.add_argument('--time-limit',
-        help='Algorithm time limit (in seconds)',
-        type=int,
-        default=60*60)
-    return parser.parse_args()
 
 
 class IlsObjective(Objective):
@@ -123,7 +104,7 @@ def _perturbation(graph, O, S, md):
     return S
 
 
-def iterated_local_search(graph, max_iter, time_limit):
+def iterated_local_search(graph, max_iter, time_limit, excludes):
     """Iterated local search algorithm"""
     # O - objective function
     # S - current solution
@@ -156,7 +137,7 @@ def iterated_local_search(graph, max_iter, time_limit):
 
             # main logic
             S = _perturbation(graph, O, S, MD)
-            S = search.local_search(graph, O, S, None)
+            S = search.local_search(graph, O, S, None, excludes)
 
             if VERBOSE and i % max_iter / 10 == 0:
                 print("O* so far:", O(graph, best_S, None))
@@ -179,12 +160,12 @@ def iterated_local_search(graph, max_iter, time_limit):
         if best_S is None:
             return None
         # final LS just in case
-        return search.local_search(graph, O, best_S, None)
+        return search.local_search(graph, O, best_S, None, excludes)
 
 
 def main():
     """Main entry point"""
-    args = parse_args()
+    args = basic_parser().parse_args()
     if VERBOSE:
         print(args.instances)
     for instance in args.instances:
@@ -196,7 +177,7 @@ def main():
             print('-'*100)
             print('File: {name}.txt'.format(name=graph.name))
         start = time.time()
-        S = iterated_local_search(graph, args.max_iter, args.time_limit)
+        S = iterated_local_search(graph, args.max_iter, args.time_limit, args.exclude_ls)
         elapsed = time.time() - start
         if VERBOSE:
             if S is None:

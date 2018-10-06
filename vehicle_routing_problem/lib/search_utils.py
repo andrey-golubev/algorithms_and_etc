@@ -159,12 +159,12 @@ def construct_initial_solution(graph, objective, md=None):
 
 
 # local search
-def _methods():
+def local_search_methods():
     """Return available methods used in local search"""
     return {
         '2-opt': two_opt,
         'relocate': relocate,
-        # 'exchange': exchange
+        'exchange': exchange
     }
 
 
@@ -173,10 +173,12 @@ def _do_method(method, graph, O, S, md=None):
     return (O(graph, S, md), S)
 
 
-def local_search(graph, objective, solution, md=None):
+def local_search(graph, objective, solution, md=None, excludes=[]):
     """Perform local search"""
     single_thread = False
-    methods = _methods()
+    methods = local_search_methods()
+    for excluded_method_name in excludes:
+        del methods[excluded_method_name]
     results = []
     if single_thread:
         for method in methods.values():
@@ -187,8 +189,8 @@ def local_search(graph, objective, solution, md=None):
             future_per_search_method = {executor.submit(_do_method, m, graph, objective, solution, md): name for name, m in methods.items()}
             for future in futures.as_completed(future_per_search_method):
                 results.append(future.result())
-        if not results:
-            raise Exception('Every method failed')
+    if not results:
+        raise Exception('None of the available methods evaluated')
     # get solution that gives best objective
     return sorted(results, key=lambda x: x[0])[0][1]
 
