@@ -176,6 +176,8 @@ def iterated_local_search(graph, max_iter, time_limit):
     except TimeoutError:
         pass  # supress timeout errors, expecting only from algo timeout
     finally:
+        if best_S is None:
+            return None
         # final LS just in case
         return search.local_search(graph, O, best_S, None)
 
@@ -197,14 +199,17 @@ def main():
         S = iterated_local_search(graph, args.max_iter, args.time_limit)
         elapsed = time.time() - start
         if VERBOSE:
-            print('O* = {o}'.format(o=IlsObjective()(graph, S, None)))
-            print('All served?', S.all_served(graph.customer_number))
-            print('Everything satisfied?', satisfies_all_constraints(graph, S))
-            print('----- PERFORMANCE -----')
-            print('ILS took {some} seconds'.format(some=elapsed))
+            if S is None:
+                print('! NO SOLUTION FOUND: NO SATISFYING INITIAL !')
+            else:
+                print('O* = {o}'.format(o=IlsObjective()(graph, S, None)))
+                print('All served?', S.all_served(graph.customer_number))
+                print('Everything satisfied?', satisfies_all_constraints(graph, S))
+                print('----- PERFORMANCE -----')
+                print('ILS took {some} seconds'.format(some=elapsed))
+                # visualize(S)
             print('-'*100)
-            # visualize(S)
-        if not args.no_sol:
+        if S is not None and not args.no_sol:
             filedir = os.path.dirname(os.path.abspath(__file__))
             generate_sol(graph, S, cwd=filedir, prefix='_ils_')
     return 0
