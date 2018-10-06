@@ -247,6 +247,7 @@ CUST NO.   XCOORD.   YCOORD.   DEMAND    READY TIME   DUE DATE   SERVICE TIME
         S_opt = local_search(self.graph, self.obj, S, None)
         self.assertTrue(S.routes)
         self.assertTrue(S_opt.all_served(self.graph.customer_number))
+        self.assertNotEqual(S, S_opt)
         if SearchUtilsTests.VERBOSE:
             print(S)
             print(S_opt)
