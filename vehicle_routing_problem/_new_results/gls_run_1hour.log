@@ -1,0 +1,66 @@
+['test_data/r146.txt', 'test_data/r168.txt', 'test_data/r202.txt', 'test_data/rc105.txt', 'test_data/rc148.txt', 'test_data/rc207.txt', 'test_data/c266.txt']
+----------------------------------------------------------------------------------------------------
+File: r146.txt
+O = 33064.578026897936
+O* so far: 33064.578026897936
+O* = 13908.49574496877
+All served? True
+Everything satisfied? True
+----- PERFORMANCE -----
+GLS took 1338.5033059120178 seconds
+----------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
+File: r168.txt
+O = 74860.15494959561
+O* so far: 74860.15494959561
+O* = 24216.623041361385
+All served? True
+Everything satisfied? True
+----- PERFORMANCE -----
+GLS took 3296.453468322754 seconds
+----------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
+File: r202.txt
+O = 3694.22115327672
+O* so far: 3694.22115327672
+O* = 1516.4799448512017
+All served? True
+Everything satisfied? True
+----- PERFORMANCE -----
+GLS took 14.914009094238281 seconds
+----------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
+File: rc105.txt
+Traceback (most recent call last):
+  File "guided_local_search.py", line 105, in guided_local_search
+    raise ValueError("couldn't find satisfying initial solution")
+ValueError: couldn't find satisfying initial solution
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "guided_local_search.py", line 174, in <module>
+    sys.exit(main())
+  File "guided_local_search.py", line 156, in main
+    graph, args.penalty_factor, args.max_iter, args.time_limit)
+  File "guided_local_search.py", line 138, in guided_local_search
+    return search.local_search(graph, O, best_S, None)
+  File "/home/andrgolubev/projects/algorithms_and_etc/vehicle_routing_problem/./lib/search_utils.py", line 189, in local_search
+    results.append(future.result())
+  File "/usr/lib/python3.5/concurrent/futures/_base.py", line 398, in result
+    return self.__get_result()
+  File "/usr/lib/python3.5/concurrent/futures/_base.py", line 357, in __get_result
+    raise self._exception
+  File "/usr/lib/python3.5/concurrent/futures/thread.py", line 55, in run
+    result = self.fn(*self.args, **self.kwargs)
+  File "/home/andrgolubev/projects/algorithms_and_etc/vehicle_routing_problem/./lib/search_utils.py", line 172, in _do_method
+    S = method(graph, O, S, md)
+  File "/home/andrgolubev/projects/algorithms_and_etc/vehicle_routing_problem/./lib/local_search_strategies.py", line 187, in relocate
+    solution = _relocate_one(customer, graph, objective, solution, md)
+  File "/home/andrgolubev/projects/algorithms_and_etc/vehicle_routing_problem/./lib/local_search_strategies.py", line 114, in _relocate_one
+    curr_best_O = objective(graph, S, md)
+  File "guided_local_search.py", line 60, in __call__
+    value = self._distance(graph, solution)
+  File "/home/andrgolubev/projects/algorithms_and_etc/vehicle_routing_problem/./lib/graph.py", line 123, in _distance
+    for route in solution:
+TypeError: 'NoneType' object is not iterable

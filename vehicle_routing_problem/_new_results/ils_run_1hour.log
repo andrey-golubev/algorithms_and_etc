@@ -1,0 +1,62 @@
+['test_data/r146.txt', 'test_data/r168.txt', 'test_data/r202.txt', 'test_data/rc105.txt', 'test_data/rc148.txt', 'test_data/rc207.txt', 'test_data/c266.txt']
+----------------------------------------------------------------------------------------------------
+File: r146.txt
+O = 33064.578026897936
+O* so far: 33064.578026897936
+- Timeout reached -
+O* = 13502.14427219704
+All served? True
+Everything satisfied? True
+----- PERFORMANCE -----
+ILS took 3760.4235520362854 seconds
+----------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
+File: r168.txt
+O = 74860.15494959561
+O* so far: 74860.15494959561
+- Timeout reached -
+O* = 23623.092450688244
+All served? True
+Everything satisfied? True
+----- PERFORMANCE -----
+ILS took 3911.1723091602325 seconds
+----------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
+File: r202.txt
+O = 3694.22115327672
+O* so far: 3694.22115327672
+O* = 1395.5229079429955
+All served? True
+Everything satisfied? True
+----- PERFORMANCE -----
+ILS took 175.2278814315796 seconds
+----------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
+File: rc105.txt
+Traceback (most recent call last):
+  File "iterated_local_search.py", line 141, in iterated_local_search
+    raise ValueError("couldn't find satisfying initial solution")
+ValueError: couldn't find satisfying initial solution
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "iterated_local_search.py", line 215, in <module>
+    sys.exit(main())
+  File "iterated_local_search.py", line 197, in main
+    S = iterated_local_search(graph, args.max_iter, args.time_limit)
+  File "iterated_local_search.py", line 180, in iterated_local_search
+    return search.local_search(graph, O, best_S, None)
+  File "/home/andrgolubev/projects/algorithms_and_etc/vehicle_routing_problem/./lib/search_utils.py", line 189, in local_search
+    results.append(future.result())
+  File "/usr/lib/python3.5/concurrent/futures/_base.py", line 398, in result
+    return self.__get_result()
+  File "/usr/lib/python3.5/concurrent/futures/_base.py", line 357, in __get_result
+    raise self._exception
+  File "/usr/lib/python3.5/concurrent/futures/thread.py", line 55, in run
+    result = self.fn(*self.args, **self.kwargs)
+  File "/home/andrgolubev/projects/algorithms_and_etc/vehicle_routing_problem/./lib/search_utils.py", line 172, in _do_method
+    S = method(graph, O, S, md)
+  File "/home/andrgolubev/projects/algorithms_and_etc/vehicle_routing_problem/./lib/local_search_strategies.py", line 71, in two_opt
+    routes = [None] * len(solution)
+TypeError: object of type 'NoneType' has no len()
