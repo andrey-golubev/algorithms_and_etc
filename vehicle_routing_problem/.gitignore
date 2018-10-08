@@ -1,5 +1,0 @@
-CMakeLists.txt.user
-.vscode
-__pycache__
-.test_data
-.pytest*
