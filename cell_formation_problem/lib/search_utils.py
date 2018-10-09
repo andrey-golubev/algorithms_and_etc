@@ -22,16 +22,22 @@ def create_initial_solution(scheme):
     """Create initial solution"""
     m = scheme.machines_number
     p = scheme.parts_number
-    m_clusters = [i for i in range(m)]
-    p_clusters = [i for i in range(p)]
+    m_clusters = [0]*m
+    p_clusters = [0]*p
     return Solution(clusters=(m_clusters, p_clusters))
 
 
+# [1] shake:
+#  a) merge 2 bad clusters into 1
+#  b) split bad cluster into 2(2+?)
 def shake(scheme, objective, solution):
     """Perform shaking procedure"""
     return solution
 
 
+# [2] local search:
+#  a) move part to different cluster
+#  b) move machine to different cluster
 def local_search(scheme, objective, solution):
     """Perform local search"""
     return solution

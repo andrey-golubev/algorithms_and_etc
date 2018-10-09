@@ -19,6 +19,15 @@ class Solution(object):
         if t == 'p':
             return self._p_c
 
+    @property
+    def number_of_clusters(self):
+        return len(set(self._m_c))
+
+    @property
+    def shape(self):
+        """Get shape of solution: M x P"""
+        return len(self._m_c), len(self._p_c)
+
 
 class Scheme(object):
     """Scheme of machines and corresponding parts"""

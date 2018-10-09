@@ -25,6 +25,7 @@ with import_from('.'):
     from lib.problem_utils import Scheme
     from lib.problem_utils import CfpObjective
     from lib.generate_output import generate_sol
+    from lib.constraints import satisfies_constraints
 
 
 def parse_args():
@@ -57,6 +58,8 @@ def variable_neighbourhood_search(scheme, time_limit, max_iter):
     try:
         O = CfpObjective()
         S = search.create_initial_solution(scheme)
+        if not satisfies_constraints(scheme, S):
+            raise ValueError('initial solution is infeasible')
         best_S = S
 
         start = time.time()
