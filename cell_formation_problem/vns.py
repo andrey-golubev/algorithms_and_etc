@@ -60,6 +60,7 @@ def variable_neighbourhood_search(scheme, time_limit, max_iter):
         best_S = S
 
         start = time.time()
+        objective_unchanged = 0
         for i in range(max_iter):
             elapsed = time.time() - start
             if elapsed > time_limit:
@@ -69,10 +70,16 @@ def variable_neighbourhood_search(scheme, time_limit, max_iter):
             S = search.local_search(scheme, O, S)
             if i % max_iter / 10 == 0:
                 print("O* so far:", O(scheme, best_S))
-            # if O(scheme, S) <= O(scheme, best_S):
-            #    # due to deterministic behavior, once objective
-            #    # function stops increasing, best solution found
-            #    break
+            if S == best_S:
+                # solution didn't change after perturbation + local search
+                break
+            if objective_unchanged > max_iter * 0.1:
+                # if 10% of iterations in a row there's no improvement, stop
+                break
+            if O(scheme, S, None) <= O(scheme, best_S, None):
+                objective_unchanged += 1
+                continue
+            objective_unchanged = 0
             best_S = S
     except TimeoutError:
         pass  # supress timeout errors, expecting only from algo timeout
