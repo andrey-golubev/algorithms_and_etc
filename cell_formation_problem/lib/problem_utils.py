@@ -1,5 +1,7 @@
 """Problem utilities"""
 
+from copy import copy as shallowcopy
+
 
 class Solution(object):
     """
@@ -18,6 +20,14 @@ class Solution(object):
             return self._m_c
         if t == 'p':
             return self._p_c
+
+    def __eq__(self, other):
+        """Equality operator"""
+        return self._m_c == other._m_c and self._p_c == other._p_c
+
+    def __neq__(self, other):
+        """Inequality operator"""
+        return not (self == other)
 
     @property
     def number_of_clusters(self):
@@ -161,18 +171,36 @@ class Cluster(object):
         self.id = cluster_id
         self.machines = set(machines)
         self.parts = set(parts)
-        # can split if at least 2 machines and 2 parts
-        self.value = CfpObjective.cluster_objective(scheme, self)
+        self._scheme = shallowcopy(scheme)
+
+    def _components_lengths_equal(self, value):
+        """
+        Check if machines, parts components lengths are equal to value
+        """
+        return len(self.machines) == value and len(self.parts) == value
+
+    @property
+    def value(self):
+        """Calculate objective value for cluster"""
+        return CfpObjective.cluster_objective(self._scheme, self)
 
     @property
     def can_split(self):
         """Check whether cluster can be split"""
+        # can split if at least 2 machines and 2 parts
         return len(self.parts) > 1 and len(self.machines) > 1
 
     @property
     def empty(self):
         """Check whether cluster is empty"""
-        return len(self.machines) == 0 and len(self.parts) == 0
+        return self._components_lengths_equal(0)
+
+    @property
+    def near_empty(self):
+        """
+        Check whether cluster is nearly empty (contains 1 machine or 1 part)
+        """
+        return self._components_lengths_equal(1)
 
 
 def construct_clusters(scheme, solution):

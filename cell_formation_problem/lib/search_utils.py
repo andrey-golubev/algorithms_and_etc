@@ -87,8 +87,7 @@ def _split_in_two(scheme, cluster):
         new_cluster = deepcopy(new_clusters[1])
         new_cluster.machines.add(machine_id)
         new_cluster.parts.add(part_id)
-        new_O = CfpObjective.cluster_objective(scheme, curr_cluster)
-        new_O += CfpObjective.cluster_objective(scheme, new_cluster)
+        new_O = curr_cluster.value + new_cluster.value
         if new_O > base_O:
             # better objective => accept change
             new_clusters[0] = curr_cluster
@@ -144,9 +143,43 @@ def _move_elements(scheme, objective, solution):
 
 #   2) One-way movements
 #       a) move part to different cluster
-def _move_parts(scheme, objective, solution):
+def _move(elem_id, src, dst):
+    """
+    Move element by id from src to dst, returning a copy of src and dst
+    """
+    src = deepcopy(src)
+    dst = deepcopy(dst)
+    src.remove(elem_id)
+    dst.add(elem_id)
+    return src, dst
+
+
+def _move_parts(scheme, O, S):
     """Perform movement of parts between clusters within a solution"""
-    return solution
+    clusters = construct_clusters(scheme, S)
+    new_clusters = deepcopy(clusters)
+    for i in range(len(clusters)):
+        if clusters[i].near_empty:
+            continue
+        cluster_a = deepcopy(clusters[i])
+        for j in range(i + 1, len(clusters)):
+            if clusters[j].near_empty:
+                continue
+            cluster_b = deepcopy(clusters[j])
+            for part in cluster_a.parts:
+                cluster_a.parts, cluster_b.parts = _move(
+                    part, cluster_a.parts, cluster_b.parts)
+                # apply updates
+                updated_clusters = deepcopy(new_clusters)
+                updated_clusters[i] = cluster_a
+                updated_clusters[j] = cluster_b
+                new_S = Solution.from_clusters(scheme, updated_clusters)
+                if satisfies_constraints(scheme, new_S):
+                    if O(scheme, new_S) > O(scheme, S):
+                        S = new_S
+                if cluster_a.near_empty or cluster_a.near_empty:
+                    break
+    return S
 
 
 #       b) move machine to different cluster
@@ -157,4 +190,5 @@ def _move_machines(scheme, objective, solution):
 
 def local_search(scheme, objective, solution):
     """Perform local search"""
+    # solution = _move_parts(scheme, objective, solution)
     return solution
