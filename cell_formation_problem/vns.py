@@ -61,6 +61,7 @@ def variable_neighbourhood_search(scheme, time_limit, max_iter):
         if not satisfies_constraints(scheme, S):
             raise ValueError('initial solution is infeasible')
         best_S = S
+        best_O = O(scheme, best_S)
 
         start = time.time()
         objective_unchanged = 0
@@ -72,24 +73,29 @@ def variable_neighbourhood_search(scheme, time_limit, max_iter):
             S = search.shake(scheme, O, S)
             S = search.local_search(scheme, O, S)
             if i % max_iter / 10 == 0:
-                print("O* so far:", O(scheme, best_S))
+                print("O* so far:", best_O)
             if S == best_S:
                 # solution didn't change after perturbation + local search
                 break
             if objective_unchanged > max_iter * 0.1:
                 # if 10% of iterations in a row there's no improvement, stop
                 break
-            if O(scheme, S, None) <= O(scheme, best_S, None):
+            curr_O = O(scheme, S)
+            if curr_O <= best_O:
                 objective_unchanged += 1
                 continue
             objective_unchanged = 0
             best_S = S
+            best_O = curr_O
     except TimeoutError:
         pass  # supress timeout errors, expecting only from algo timeout
-    finally:
-        if best_S is None:
-            return None
-        return search.local_search(scheme, O, best_S)
+    except Exception:
+        raise
+    # finally:
+    #     if best_S is None:
+    #         return None
+    #     return search.local_search(scheme, O, best_S)
+    return search.local_search(scheme, O, best_S)
 
 
 def main():
@@ -110,6 +116,8 @@ def main():
             print('! NO SOLUTION FOUND !')
         else:
             print('O* = {o}'.format(o=CfpObjective()(scheme, S)))
+            print('Number of clusters: {number}'.format(
+                number=S.number_of_clusters))
             print('----- PERFORMANCE -----')
             print('VNS took {some} seconds'.format(some=elapsed))
         print('-'*100)

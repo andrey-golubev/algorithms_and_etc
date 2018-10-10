@@ -21,12 +21,33 @@ class Solution(object):
 
     @property
     def number_of_clusters(self):
+        """
+        Get number of clusters
+
+        Usage of same clusters for machines and parts is enforced by constraints
+        """
         return len(set(self._m_c))
 
     @property
     def shape(self):
         """Get shape of solution: M x P"""
         return len(self._m_c), len(self._p_c)
+
+    @staticmethod
+    def from_clusters(scheme, clusters):
+        """Construct Solution object from list of Cluster objects"""
+        machine_clusters = [None]*scheme.machines_number
+        parts_clusters = [None]*scheme.parts_number
+        for cluster in clusters:
+            for m_id in cluster.machines:
+                machine_clusters[m_id] = cluster.id
+            for p_id in cluster.parts:
+                parts_clusters[p_id] = cluster.id
+        if any(e is None for e in machine_clusters):
+            raise ValueError('given clusters incomplete')
+        if any(e is None for e in parts_clusters):
+            raise ValueError('given clusters incomplete')
+        return Solution((machine_clusters, parts_clusters))
 
 
 class Scheme(object):
@@ -89,7 +110,9 @@ class CfpObjective():
     """Cell formation problem objective function"""
     def __call__(self, scheme, solution):
         """
-        operator() interface
+        Calculate objective function value for solution
+
+        operator() implementation
         :param scheme:
             Scheme object
         :param solution:
@@ -108,3 +131,65 @@ class CfpObjective():
                     n1_in += value
                     n0_in += 1 - value
         return n1_in / (n1 + n0_in)
+
+    @staticmethod
+    def cluster_objective(scheme, cluster):
+        """
+        Calculate objective function value for cluster
+
+        :param scheme:
+            Scheme object
+        :param cluster:
+            Cluster object (a.k.a. cell)
+        """
+        n1 = scheme.n1
+        n1_in = 0
+        n0_in = 0
+        matrix = scheme.matrix
+        for m_id in cluster.machines:
+            for p_id in cluster.parts:
+                value = matrix[m_id][p_id]
+                n1_in += value
+                n0_in += 1 - value
+        return n1_in / (n1 + n0_in)
+
+
+class Cluster(object):
+    """Cluster object"""
+    def __init__(self, scheme, cluster_id, machines, parts):
+        """Init method"""
+        self.id = cluster_id
+        self.machines = set(machines)
+        self.parts = set(parts)
+        # can split if at least 2 machines and 2 parts
+        self.value = CfpObjective.cluster_objective(scheme, self)
+
+    @property
+    def can_split(self):
+        """Check whether cluster can be split"""
+        return len(self.parts) > 1 and len(self.machines) > 1
+
+    @property
+    def empty(self):
+        """Check whether cluster is empty"""
+        return len(self.machines) == 0 and len(self.parts) == 0
+
+
+def construct_clusters(scheme, solution):
+    """Construct clusters from solution"""
+    cells = {}
+    for cluster_id in range(solution.number_of_clusters):
+        cells[cluster_id] = cells.get(cluster_id, {'m': set(), 'p': set()})
+        for m_id, m_c in enumerate(solution['m']):
+            if cluster_id != m_c:
+                continue
+            cells[cluster_id]['m'].add(m_id)
+        for p_id, p_c in enumerate(solution['p']):
+            if cluster_id != p_c:
+                continue
+            cells[cluster_id]['p'].add(p_id)
+    clusters = []
+    for c_id in cells.keys():
+        cell = cells[c_id]
+        clusters.append(Cluster(scheme, c_id, cell['m'], cell['p']))
+    return sorted(clusters, key=lambda c: c.value)
