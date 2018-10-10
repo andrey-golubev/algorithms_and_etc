@@ -130,12 +130,31 @@ def _split(scheme, O, S):
 def shake(scheme, objective, solution):
     """Perform shaking procedure"""
     solution = _split(scheme, objective, solution)
+    # TODO: merge
     return solution
 
 
 # [2] local search:
-#  a) move part to different cluster
-#  b) move machine to different cluster
+#   1) Both-way movements
+#       a) move cluster element (machine-part) to another cluster
+def _move_elements(scheme, objective, solution):
+    """Perform movement of cluster elements within a solution"""
+    return solution
+
+
+#   2) One-way movements
+#       a) move part to different cluster
+def _move_parts(scheme, objective, solution):
+    """Perform movement of parts between clusters within a solution"""
+    return solution
+
+
+#       b) move machine to different cluster
+def _move_machines(scheme, objective, solution):
+    """Perform movement of machines between clusters within a solution"""
+    return solution
+
+
 def local_search(scheme, objective, solution):
     """Perform local search"""
     return solution
