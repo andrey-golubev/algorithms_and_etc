@@ -142,7 +142,6 @@ def _move_elements(scheme, objective, solution):
 
 
 #   2) One-way movements
-#       a) move part to different cluster
 def _move(elem_id, src, dst):
     """
     Move element by id from src to dst, returning a copy of src and dst
@@ -152,6 +151,27 @@ def _move(elem_id, src, dst):
     src.remove(elem_id)
     dst.add(elem_id)
     return src, dst
+
+#       a) move part to different cluster
+def _find_best_fit_for_parts(scheme, clusters):
+    """
+    Rate parts within current solution. Find best fit clusters for each
+    """
+    rated_parts = []
+    matrix = scheme.matrix
+    for curr_id, cluster in enumerate(clusters):
+        for part in cluster.parts:
+            part_ratings = []
+            for new_id, cluster in enumerate(clusters):
+                rating = sum(matrix[m_id][part] for m_id in cluster.machines)
+                part_ratings.append((rating, curr_id, new_id))
+            best_rating = sorted(
+                part_ratings, key=lambda x: x[0], reversed=True)[0]
+            if best_rating[1] != best_rating[2]:
+                # if best cluster is the one part currently in, do not count it
+                rating = (part,) + best_rating
+                rated_parts.append(rating)
+    return sorted(rated_parts, key=lambda x: x[1])
 
 
 def _move_parts(scheme, O, S):
