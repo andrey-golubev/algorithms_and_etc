@@ -1,8 +1,11 @@
 """
 Search utilities
 """
+import concurrent.futures as futures
+import multiprocessing
 from copy import deepcopy
 from collections import namedtuple
+
 
 # local imports
 from contextlib import contextmanager
@@ -143,87 +146,175 @@ def _move_elements(scheme, objective, solution):
 
 
 #   2) One-way movements
-def _move(elem_id, src, dst):
+def _move(element, src, dst):
     """
-    Move element by id from src to dst, returning a copy of src and dst
+    Move element from src to dst, returning a copy of src and dst
     """
     src = deepcopy(src)
     dst = deepcopy(dst)
-    src.remove(elem_id)
-    dst.add(elem_id)
+    src.remove(element)
+    dst.add(element)
     return src, dst
 
+
 #       a) move part to different cluster
-def _find_best_fit_for_parts(scheme, clusters):
+def _find_best_fit_for_parts(scheme, clusters, excludes=set()):
     """
-    Rate parts within current solution. Find best fit clusters for each part
+    Rate parts in current solution. Find best fit cluster for each part
     """
     PartRating = namedtuple('PartRating',
         ['part', 'rating', 'curr_cluster', 'new_cluster'])
     rated_parts = []
     matrix = scheme.matrix
     for curr_id, cluster in enumerate(clusters):
-        for part in cluster.parts:
+        if cluster.near_empty:  # can't move parts out of almost empty cluster
+            continue
+        parts = cluster.parts
+        # parts = cluster.parts - excludes  # TODO: excludes are probably not needed
+        for part in parts:
             part_ratings = []
-            for new_id, cluster in enumerate(clusters):
-                rating = sum(matrix[m_id][part] for m_id in cluster.machines)
-                part_ratings.append(PartRating(None, rating, curr_id, new_id))
+            for new_id, new_cluster in enumerate(clusters):
+                rating = sum(matrix[m_id][part] for m_id in new_cluster.machines)
+                part_ratings.append(PartRating(part, rating, curr_id, new_id))
             best_rating = sorted(
                 part_ratings, key=lambda x: x.rating, reverse=True)[0]
             if best_rating.curr_cluster == best_rating.new_cluster:
-                # do not look at parts that are "good" in current cluster
+                # skip parts that are "good" in current cluster
                 continue
-            rating = PartRating(
-                part,
-                best_rating.rating,
-                best_rating.curr_cluster,
-                best_rating.new_cluster)
-            rated_parts.append(rating)
+            rated_parts.append(best_rating)
     return sorted(rated_parts, key=lambda x: x.rating)
-
-
-def _move_parts_sorted(scheme, O, S):
-    """Perform movement of parts between clusters within a solution"""
-    clusters = construct_clusters(scheme, S)
-    rated_parts = _find_best_fit_for_parts(scheme, clusters)
-    return S
 
 
 def _move_parts(scheme, O, S):
     """Perform movement of parts between clusters within a solution"""
     clusters = construct_clusters(scheme, S)
-    new_clusters = deepcopy(clusters)
-    for i in range(len(clusters)):
-        if clusters[i].near_empty:
+    rated_parts = _find_best_fit_for_parts(scheme, clusters)
+    already_moved = set()
+    while rated_parts:
+        stat = rated_parts.pop(0)
+        curr_id, new_id = stat.curr_cluster, stat.new_cluster
+        if clusters[curr_id].near_empty:
+            # can't move anything out of near empty cluster
             continue
-        cluster_a = deepcopy(clusters[i])
-        for j in range(i + 1, len(clusters)):
-            if clusters[j].near_empty:
-                continue
-            cluster_b = deepcopy(clusters[j])
-            for part in cluster_a.parts:
-                cluster_a.parts, cluster_b.parts = _move(
-                    part, cluster_a.parts, cluster_b.parts)
-                # apply updates
-                updated_clusters = deepcopy(new_clusters)
-                updated_clusters[i] = cluster_a
-                updated_clusters[j] = cluster_b
-                new_S = Solution.from_clusters(scheme, updated_clusters)
-                if satisfies_constraints(scheme, new_S):
-                    if O(scheme, new_S) > O(scheme, S):
-                        S = new_S
-                if cluster_a.near_empty or cluster_a.near_empty:
-                    break
+        curr_cluster = deepcopy(clusters[curr_id])
+        new_cluster = deepcopy(clusters[new_id])
+        curr_cluster.parts, new_cluster.parts = _move(
+            stat.part, curr_cluster.parts, new_cluster.parts)
+        old_value = clusters[curr_id].value + clusters[new_id].value
+        new_value = curr_cluster.value + new_cluster.value
+        # if new clusters have better objective than old ones, approve move
+        if new_value > old_value:
+            clusters[curr_id] = curr_cluster
+            clusters[new_id] = new_cluster
+            already_moved.add(stat.part)
+            rated_parts = _find_best_fit_for_parts(
+                scheme, clusters, excludes=already_moved)
+
+    # construct new S
+    # if new S is better and satisfies constraints, approve changes
+    new_S = Solution.from_clusters(scheme, clusters)
+    if O(scheme, new_S) > O(scheme, S) and satisfies_constraints(scheme, new_S):
+        S = new_S
     return S
 
 
 #       b) move machine to different cluster
-def _move_machines(scheme, objective, solution):
+def _find_best_fit_for_machines(scheme, clusters, excludes=set()):
+    """
+    Rate machines in current solution. Find best fit cluster for each machine
+    """
+    MachineRating = namedtuple('MachineRating',
+        ['machine', 'rating', 'curr_cluster', 'new_cluster'])
+    rated_machines = []
+    matrix = scheme.matrix
+    for curr_id, cluster in enumerate(clusters):
+        if cluster.near_empty:  # can't move machines out of almost empty cluster
+            continue
+        machines = cluster.machines
+        # machines = cluster.machines - excludes  # TODO: excludes are probably not needed
+        for machine in machines:
+            machine_ratings = []
+            for new_id, new_cluster in enumerate(clusters):
+                rating = sum(matrix[machine][p_id] for p_id in new_cluster.parts)
+                machine_ratings.append(MachineRating(machine, rating, curr_id, new_id))
+            best_rating = sorted(
+                machine_ratings, key=lambda x: x.rating, reverse=True)[0]
+            if best_rating.curr_cluster == best_rating.new_cluster:
+                # skip machines that are "good" in current cluster
+                continue
+            rated_machines.append(best_rating)
+    return sorted(rated_machines, key=lambda x: x.rating)
+
+
+def _move_machines(scheme, O, S):
     """Perform movement of machines between clusters within a solution"""
-    return solution
+    clusters = construct_clusters(scheme, S)
+    rated_machines = _find_best_fit_for_machines(scheme, clusters)
+    already_moved = set()
+    while rated_machines:
+        stat = rated_machines.pop(0)
+        curr_id, new_id = stat.curr_cluster, stat.new_cluster
+        if clusters[curr_id].near_empty:
+            # can't move anything out of near empty cluster
+            continue
+        curr_cluster = deepcopy(clusters[curr_id])
+        new_cluster = deepcopy(clusters[new_id])
+        curr_cluster.machines, new_cluster.machines = _move(
+            stat.machine, curr_cluster.machines, new_cluster.machines)
+        old_value = clusters[curr_id].value + clusters[new_id].value
+        new_value = curr_cluster.value + new_cluster.value
+        # if new clusters have better objective than old ones, approve move
+        if new_value > old_value:
+            clusters[curr_id] = curr_cluster
+            clusters[new_id] = new_cluster
+            already_moved.add(stat.machine)
+            rated_machines = _find_best_fit_for_machines(
+                scheme, clusters, excludes=already_moved)
+
+    # construct new S
+    # if new S is better and satisfies constraints, approve changes
+    new_S = Solution.from_clusters(scheme, clusters)
+    if O(scheme, new_S) > O(scheme, S) and satisfies_constraints(scheme, new_S):
+        S = new_S
+    return S
+
+
+# local search
+def _local_search_pipelines():
+    """Return available method pipelines used in local search"""
+    return {
+        'parts_machines_move': [
+            _move_parts,
+            _move_machines,
+        ],
+        'machines_parts_move': [
+            _move_machines,
+            _move_parts,
+        ]
+    }
+
+def _execute(pipeline, scheme, O, S):
+    """Caller for the sequence of methods"""
+    for method in pipeline:
+        S = method(scheme, O, S)
+    return (O(scheme, S), S)
 
 
 def local_search(scheme, objective, solution):
     """Perform local search"""
-    # solution = _move_parts_sorted(scheme, objective, solution)
-    return solution
+    single_thread = False
+    pipelines = _local_search_pipelines()
+    results = []
+    if single_thread:
+        for pipeline in pipelines:
+            value, S = _execute(pipeline, scheme, objective, solution)
+            results.append((value, S))
+    else:
+        with futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
+            futures_per_pipeline = {executor.submit(_execute, p, scheme, objective, solution): name for name, p in pipelines.items()}
+            for future in futures_per_pipeline:
+                results.append(future.result())
+    if not results:
+        raise RuntimeError('no pipelines executed in Local Search')
+    # return solution that gives best objective
+    return sorted(results, key=lambda x: x[0], reverse=True)[0][1]

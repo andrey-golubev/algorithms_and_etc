@@ -118,6 +118,7 @@ def main():
             print('O* = {o}'.format(o=CfpObjective()(scheme, S)))
             print('Number of clusters: {number}'.format(
                 number=S.number_of_clusters))
+            print('All satisfied?', satisfies_constraints(scheme, S))
             print('----- PERFORMANCE -----')
             print('VNS took {some} seconds'.format(some=elapsed))
         print('-'*100)
