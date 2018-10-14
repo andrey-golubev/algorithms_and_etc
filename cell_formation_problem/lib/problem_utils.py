@@ -1,6 +1,7 @@
 """Problem utilities"""
 
 from copy import copy as shallowcopy
+from decimal import Decimal
 
 
 class Solution(object):
@@ -128,9 +129,9 @@ class CfpObjective():
         :param solution:
             Solution object
         """
-        n1 = scheme.n1
-        n1_in = 0
-        n0_in = 0
+        n1 = Decimal(scheme.n1)
+        n1_in = Decimal(0)
+        n0_in = Decimal(0)
         matrix = scheme.matrix
         for m_id, parts in enumerate(matrix):
             for p_id, value in enumerate(parts):
@@ -152,9 +153,9 @@ class CfpObjective():
         :param cluster:
             Cluster object (a.k.a. cell)
         """
-        n1 = scheme.n1
-        n1_in = 0
-        n0_in = 0
+        n1 = Decimal(scheme.n1)
+        n1_in = Decimal(0)
+        n0_in = Decimal(0)
         matrix = scheme.matrix
         for m_id in cluster.machines:
             for p_id in cluster.parts:
