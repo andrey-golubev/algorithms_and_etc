@@ -180,6 +180,11 @@ class Cluster(object):
         """
         return len(self.machines) == value and len(self.parts) == value
 
+    def merge(self, other):
+        """Merge other cluster into self"""
+        self.parts |= other.parts
+        self.machines |= other.machines
+
     @property
     def value(self):
         """Calculate objective value for cluster"""

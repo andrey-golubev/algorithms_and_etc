@@ -27,6 +27,7 @@ with import_from('.'):
     from problem_utils import construct_clusters
 
 
+# initial solution
 def create_initial_solution(scheme):
     """Create initial solution"""
     m = scheme.machines_number
@@ -34,6 +35,38 @@ def create_initial_solution(scheme):
     m_clusters = [0]*m
     p_clusters = [0]*p
     return Solution(clusters=(m_clusters, p_clusters))
+
+
+# parallel execution
+def _execute(pipeline, scheme, O, S):
+    """Caller for the sequence of methods"""
+    for method in pipeline:
+        S = method(scheme, O, S)
+    return (O(scheme, S), S)
+
+
+def _parallel_run(pipelines, scheme, objective, solution, single_thread=False):
+    """
+    Execute sequential pipelines in parallel
+
+    Note: if single_thread is True, the execution in not parallel but a
+    single-threaded for-loop is used instead
+    """
+    single_thread = False
+    results = []
+    if single_thread:
+        for pipeline in pipelines:
+            value, S = _execute(pipeline, scheme, objective, solution)
+            results.append((value, S))
+    else:
+        with futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
+            futures_per_pipeline = {executor.submit(_execute, p, scheme, objective, solution): name for name, p in pipelines.items()}
+            for future in futures_per_pipeline:
+                results.append(future.result())
+    if not results:
+        raise RuntimeError('no pipelines executed in Local Search')
+    # return solution that gives best objective
+    return sorted(results, key=lambda x: x[0], reverse=True)[0][1]
 
 
 # [1] shake:
@@ -130,15 +163,48 @@ def _split(scheme, O, S):
     return S
 
 
+def _merge(scheme, O, S):
+    """Merge bad clusters into 1"""
+    clusters = construct_clusters(scheme, S)
+    new_clusters = []
+    while clusters:
+        updated_cluster = clusters.pop(0)
+        cluster_length = len(clusters)
+        for _ in range(cluster_length):
+            if not clusters:
+                break
+            next_cluster = clusters.pop(0)
+            merged = deepcopy(updated_cluster)
+            merged.merge(next_cluster)
+            # if merged cluster is worse than split clusters, do not merge
+            # else, merge
+            if merged.value <= updated_cluster.value + next_cluster.value:
+                clusters.append(next_cluster)
+            else:
+                updated_cluster = merged
+        new_clusters.append(updated_cluster)
+    # fix ids
+    for i in range(len(new_clusters)):
+        new_clusters[i].id = i
+    new_S = Solution.from_clusters(scheme, new_clusters)
+    if satisfies_constraints(scheme, new_S):
+        S = new_S
+    else:  # shouldn't happen
+        raise ValueError('infeasible solution in split')
+    return S
+
+
 def shake(scheme, objective, solution):
     """Perform shaking procedure"""
-    solution = _split(scheme, objective, solution)
-    # TODO: merge
-    return solution
+    shake_pipelines = {
+        'split': [_split],
+        'merge': [_merge]
+    }
+    return _parallel_run(shake_pipelines, scheme, objective, solution)
 
 
 # [2] local search:
-#   1) Both-way movements
+#   1) Two-way movements
 #       a) move cluster element (machine-part) to another cluster
 def _move_elements(scheme, objective, solution):
     """Perform movement of cluster elements within a solution"""
@@ -280,9 +346,9 @@ def _move_machines(scheme, O, S):
 
 
 # local search
-def _local_search_pipelines():
-    """Return available method pipelines used in local search"""
-    return {
+def local_search(scheme, objective, solution):
+    """Perform local search"""
+    ls_pipelines = {
         'parts_machines_move': [
             _move_parts,
             _move_machines,
@@ -292,29 +358,4 @@ def _local_search_pipelines():
             _move_parts,
         ]
     }
-
-def _execute(pipeline, scheme, O, S):
-    """Caller for the sequence of methods"""
-    for method in pipeline:
-        S = method(scheme, O, S)
-    return (O(scheme, S), S)
-
-
-def local_search(scheme, objective, solution):
-    """Perform local search"""
-    single_thread = False
-    pipelines = _local_search_pipelines()
-    results = []
-    if single_thread:
-        for pipeline in pipelines:
-            value, S = _execute(pipeline, scheme, objective, solution)
-            results.append((value, S))
-    else:
-        with futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
-            futures_per_pipeline = {executor.submit(_execute, p, scheme, objective, solution): name for name, p in pipelines.items()}
-            for future in futures_per_pipeline:
-                results.append(future.result())
-    if not results:
-        raise RuntimeError('no pipelines executed in Local Search')
-    # return solution that gives best objective
-    return sorted(results, key=lambda x: x[0], reverse=True)[0][1]
+    return _parallel_run(ls_pipelines, scheme, objective, solution)
