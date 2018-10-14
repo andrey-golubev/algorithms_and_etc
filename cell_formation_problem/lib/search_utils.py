@@ -2,6 +2,7 @@
 Search utilities
 """
 from copy import deepcopy
+from collections import namedtuple
 
 # local imports
 from contextlib import contextmanager
@@ -155,8 +156,10 @@ def _move(elem_id, src, dst):
 #       a) move part to different cluster
 def _find_best_fit_for_parts(scheme, clusters):
     """
-    Rate parts within current solution. Find best fit clusters for each
+    Rate parts within current solution. Find best fit clusters for each part
     """
+    PartRating = namedtuple('PartRating',
+        ['part', 'rating', 'curr_cluster', 'new_cluster'])
     rated_parts = []
     matrix = scheme.matrix
     for curr_id, cluster in enumerate(clusters):
@@ -164,14 +167,26 @@ def _find_best_fit_for_parts(scheme, clusters):
             part_ratings = []
             for new_id, cluster in enumerate(clusters):
                 rating = sum(matrix[m_id][part] for m_id in cluster.machines)
-                part_ratings.append((rating, curr_id, new_id))
+                part_ratings.append(PartRating(None, rating, curr_id, new_id))
             best_rating = sorted(
-                part_ratings, key=lambda x: x[0], reversed=True)[0]
-            if best_rating[1] != best_rating[2]:
-                # if best cluster is the one part currently in, do not count it
-                rating = (part,) + best_rating
-                rated_parts.append(rating)
-    return sorted(rated_parts, key=lambda x: x[1])
+                part_ratings, key=lambda x: x.rating, reverse=True)[0]
+            if best_rating.curr_cluster == best_rating.new_cluster:
+                # do not look at parts that are "good" in current cluster
+                continue
+            rating = PartRating(
+                part,
+                best_rating.rating,
+                best_rating.curr_cluster,
+                best_rating.new_cluster)
+            rated_parts.append(rating)
+    return sorted(rated_parts, key=lambda x: x.rating)
+
+
+def _move_parts_sorted(scheme, O, S):
+    """Perform movement of parts between clusters within a solution"""
+    clusters = construct_clusters(scheme, S)
+    rated_parts = _find_best_fit_for_parts(scheme, clusters)
+    return S
 
 
 def _move_parts(scheme, O, S):
@@ -210,5 +225,5 @@ def _move_machines(scheme, objective, solution):
 
 def local_search(scheme, objective, solution):
     """Perform local search"""
-    # solution = _move_parts(scheme, objective, solution)
+    # solution = _move_parts_sorted(scheme, objective, solution)
     return solution
