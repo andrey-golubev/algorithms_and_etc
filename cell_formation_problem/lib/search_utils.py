@@ -143,7 +143,7 @@ def _split_in_two(scheme, cluster):
     return cleaned_clusters
 
 
-def _split(scheme, O, S):
+def _split_clusters(scheme, O, S):
     """Split bad clusters in solution"""
     clusters = construct_clusters(scheme, S)
     new_clusters = []
@@ -196,7 +196,7 @@ def _merge(scheme, O, S):
     return S
 
 
-SHAKE_PIPELINES = [[_split], [_merge]]
+SHAKE_PIPELINES = [[_split_clusters], [_merge]]
 def shake(scheme, objective, solution):
     """Perform shaking procedure"""
     return _choose_best_sln(SHAKE_PIPELINES, scheme, objective, solution)
