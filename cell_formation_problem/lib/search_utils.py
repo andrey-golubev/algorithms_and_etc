@@ -45,9 +45,9 @@ def _execute(pipeline, scheme, O, S):
     return (O(scheme, S), S)
 
 
-def _parallel_run(pipelines, scheme, objective, solution, single_thread=False):
+def _choose_best_sln(pipelines, scheme, objective, solution, single_thread=False):
     """
-    Execute sequential pipelines in parallel
+    Execute sequential pipelines in parallel and choose best solution
 
     Note: if single_thread is True, the execution in not parallel but a
     single-threaded for-loop is used instead
@@ -70,8 +70,6 @@ def _parallel_run(pipelines, scheme, objective, solution, single_thread=False):
 
 
 # [1] shake:
-#  a) merge 2 bad clusters into 1
-#  b) split bad cluster into 2(2+?)
 def _to_elements(scheme, cluster, excludes={'m': set(), 'p': set()}):
     """Decompose cluster to elements"""
     # exclude parts and machines
@@ -105,6 +103,8 @@ def _to_elements(scheme, cluster, excludes={'m': set(), 'p': set()}):
     return sorted(elements, key=lambda x: x[2])
 
 
+#  a) split bad cluster into 2
+# TODO: split in K, where K is the best partition
 def _split_in_two(scheme, cluster):
     """Detach machine-part elements from cluster and return 2 clusters"""
     base_O = CfpObjective.cluster_objective(scheme, cluster)
@@ -163,6 +163,7 @@ def _split(scheme, O, S):
     return S
 
 
+#  b) merge bad clusters into 1
 def _merge(scheme, O, S):
     """Merge bad clusters into 1"""
     clusters = construct_clusters(scheme, S)
@@ -200,7 +201,7 @@ def shake(scheme, objective, solution):
         'split': [_split],
         'merge': [_merge]
     }
-    return _parallel_run(shake_pipelines, scheme, objective, solution)
+    return _choose_best_sln(shake_pipelines, scheme, objective, solution)
 
 
 # [2] local search:
@@ -358,4 +359,4 @@ def local_search(scheme, objective, solution):
             _move_parts,
         ]
     }
-    return _parallel_run(ls_pipelines, scheme, objective, solution)
+    return _choose_best_sln(ls_pipelines, scheme, objective, solution)
