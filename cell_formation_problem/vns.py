@@ -89,13 +89,13 @@ def variable_neighbourhood_search(scheme, time_limit, max_iter):
             best_O = curr_O
     except TimeoutError:
         pass  # supress timeout errors, expecting only from algo timeout
-    except Exception:
-        raise
-    # finally:
-    #     if best_S is None:
-    #         return None
-    #     return search.local_search(scheme, O, best_S)
-    return search.local_search(scheme, O, best_S)
+    # except Exception:
+    #     raise
+    finally:
+        if best_S is None:
+            return None
+        return search.local_search(scheme, O, best_S)
+    # return search.local_search(scheme, O, best_S)
 
 
 def main():
