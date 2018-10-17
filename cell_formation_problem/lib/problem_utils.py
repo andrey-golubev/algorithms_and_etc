@@ -206,7 +206,7 @@ class Cluster(object):
         """
         Check whether cluster is nearly empty (contains 1 machine or 1 part)
         """
-        return self._components_lengths_equal(1)
+        return self.empty or self._components_lengths_equal(1)
 
 
 def construct_clusters(scheme, solution):

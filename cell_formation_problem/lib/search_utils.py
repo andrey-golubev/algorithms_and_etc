@@ -74,10 +74,8 @@ def _choose_best_sln(pipelines, scheme, objective, solution, single_thread=False
 def _to_elements(scheme, cluster, excludes={'m': set(), 'p': set()}):
     """Decompose cluster to elements"""
     # exclude parts and machines
-    machines = deepcopy(cluster.machines)
-    parts = deepcopy(cluster.parts)
-    machines = machines - excludes['m']
-    parts = parts - excludes['p']
+    machines = deepcopy(cluster.machines) - excludes['m']
+    parts = deepcopy(cluster.parts) - excludes['p']
     if not parts or not machines:
         return []
 
@@ -103,43 +101,50 @@ def _to_elements(scheme, cluster, excludes={'m': set(), 'p': set()}):
             elements.append((m_id, p_id, value))
     return sorted(elements, key=lambda x: x[2])
 
-
-#  a) split bad cluster into 2
-# TODO: split in K, where K is the best partition
-def _split_in_two(scheme, cluster):
+# a) split cluster in any number of clusters
+def _split(scheme, cluster):
     """Detach machine-part elements from cluster and return 2 clusters"""
-    base_O = CfpObjective.cluster_objective(scheme, cluster)
-    new_clusters = [cluster, Cluster(scheme, 0, set(), set())]
+    cluster = deepcopy(cluster)
+    new_clusters = [Cluster(scheme, 0, set(), set())]
+    base_O = cluster.value + sum(c.value for c in new_clusters)
     excludes = { 'm': set(), 'p': set() }
-    elements = _to_elements(scheme, cluster, excludes=excludes)
+    elements = _to_elements(scheme, cluster)
     while elements:
-        # find worst element
-        # detach it from cluster
-        # see if objective grows for 2 clusters
-        machine_id, part_id, _ = elements.pop(0)
-        excludes['m'].add(machine_id)
-        excludes['p'].add(part_id)
-        curr_cluster = deepcopy(new_clusters[0])
-        curr_cluster.machines.remove(machine_id)
-        curr_cluster.parts.remove(part_id)
-        new_cluster = deepcopy(new_clusters[1])
-        new_cluster.machines.add(machine_id)
-        new_cluster.parts.add(part_id)
-        new_O = curr_cluster.value + new_cluster.value
+        # 1. remove element from cluster
+        orig_cluster = deepcopy(cluster)
+        machine, part, _ = elements.pop(0)
+        orig_cluster.machines.remove(machine)
+        orig_cluster.parts.remove(part)
+        # 2. exclude this element from future searches
+        excludes['m'].add(machine)
+        excludes['p'].add(part)
+        # 3. find better cluster among existing ones
+        rated_clusters = []
+        updated_clusters = deepcopy(new_clusters)
+        for i, updated in enumerate(updated_clusters):
+            updated.machines.add(machine)
+            updated.parts.add(part)
+            rated_clusters.append((i, updated))
+        best_i, best_cluster = max(rated_clusters, key=lambda x: x[1].value)
+        new_O = orig_cluster.value +\
+            sum(c.value for i, c in enumerate(new_clusters) if i != best_i) +\
+            best_cluster.value
+        # 4. if objective increased, accept changes
         if new_O > base_O:
-            # better objective => accept change
-            new_clusters[0] = curr_cluster
-            new_clusters[1] = new_cluster
+            cluster = orig_cluster
+            new_clusters[best_i] = best_cluster
             base_O = new_O
-            elements = _to_elements(scheme, new_clusters[0], excludes=excludes)
-
+            elements = _to_elements(scheme, cluster, excludes=excludes)
+            # if last cluster is not empty anymore, create new empty one to keep
+            # the ability to create a completely new cluster in split
+            if not new_clusters[-1].empty:
+                new_clusters.append(Cluster(scheme, 0, set(), set()))
     # clean-up empty clusters
-    cleaned_clusters = []
+    cleaned_clusters = [cluster]
     while new_clusters:
-        cluster = new_clusters.pop(0)
-        if not cluster.empty:
-            cleaned_clusters.append(cluster)
-
+        new_cluster = new_clusters.pop(0)
+        if not new_cluster.empty:
+            cleaned_clusters.append(new_cluster)
     return cleaned_clusters
 
 
@@ -152,7 +157,7 @@ def _split_clusters(scheme, O, S):
             # copy "as is"
             new_clusters.append(cluster)
             continue
-        new_clusters += _split_in_two(scheme, cluster)
+        new_clusters += _split(scheme, cluster)
     # fix ids:
     for i in range(len(new_clusters)):
         new_clusters[i].id = i
