@@ -91,6 +91,16 @@ def _choose_any_sln(pipelines, scheme, objective, solution, single_thread=False)
     return best_S
 
 
+def permute(methods):
+    """
+    Return all permutations for given methods of length 1 throun len(methods).
+    """
+    permuted = []
+    for i in range(1, len(methods) + 1):
+        permuted += [p for p in permutations(methods, i)]
+    return permuted
+
+
 # [1] shake:
 def _to_elements(scheme, cluster, excludes={'m': set(), 'p': set()}):
     """Decompose cluster to elements"""
@@ -180,11 +190,11 @@ def _split_clusters(scheme, O, S):
             # copy "as is" if can't split the cluster
             new_clusters.append(cluster)
             continue
-        if len(clusters) > 1 and p:
-            # randomly decide if want to split curr cluster
-            # always expect split if len(clusters) == 1
-            new_clusters.append(cluster)
-            continue
+        # if len(clusters) > 1 and p:
+        #     # randomly decide if want to split curr cluster
+        #     # always expect split if len(clusters) == 1
+        #     new_clusters.append(cluster)
+        #     continue
         new_clusters += _split(scheme, cluster)
     # fix ids:
     for i in range(len(new_clusters)):
@@ -429,24 +439,14 @@ def _move_machines(scheme, O, S):
 
 
 # local search
-def permute(methods):
-    """
-    Return all permutations for given methods of length 1 throun len(methods).
-    """
-    permuted = []
-    for i in range(1, len(methods) + 1):
-        permuted += [p for p in permutations(methods, i)]
-    return permuted
-
-
 LS_PIPELINES = permute([_move_parts, _move_machines, _move_elements])
 def local_search(scheme, objective, solution, choose_best=False):
     """Perform local search"""
     l = 0
     best_S = solution
     curr_S = solution
-    if choose_best:
-        best_S = _choose_best_sln(LS_PIPELINES, scheme, objective, solution)
+    #if choose_best:
+    #    best_S = _choose_best_sln(LS_PIPELINES, scheme, objective, solution)
     while l < 100:
         l += 1
         curr_S = _choose_best_sln(LS_PIPELINES, scheme, objective, curr_S)
