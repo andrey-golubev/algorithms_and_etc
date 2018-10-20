@@ -53,21 +53,41 @@ def _choose_best_sln(pipelines, scheme, objective, solution, single_thread=False
     Note: if single_thread is True, the execution in not parallel but a
     single-threaded for-loop is used instead
     """
-    single_thread = False
     results = []
     if single_thread:
         for pipeline in pipelines:
-            value, S = _execute(pipeline, scheme, objective, solution)
+            value, S = _execute(pipeline, scheme, objective, deepcopy(solution))
             results.append((value, S))
     else:
         with futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
-            futures_per_pipeline = {executor.submit(_execute, p, scheme, objective, solution) for p in pipelines}
+            futures_per_pipeline = {executor.submit(_execute, p, scheme, objective, deepcopy(solution)) for p in pipelines}
             for future in futures_per_pipeline:
                 results.append(future.result())
     if not results:
         raise RuntimeError('no pipelines executed')
     # return solution that gives best objective
     return sorted(results, key=lambda x: x[0], reverse=True)[0][1]
+
+
+def _choose_any_sln(pipelines, scheme, objective, solution, single_thread=False):
+    """
+    Execute sequential pipelines in parallel and choose any better solution
+    """
+    best_S = solution
+    best_O = objective(scheme, solution)
+    if single_thread:
+        for pipeline in pipelines:
+            value, S = _execute(pipeline, scheme, objective, deepcopy(solution))
+            if value > best_O:
+                return S
+    else:
+        with futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
+            futures_per_pipeline = {executor.submit(_execute, p, scheme, objective, deepcopy(solution)) for p in pipelines}
+            for future in futures_per_pipeline:
+                value, S = future.result()
+                if value > best_O:
+                    return S
+    return best_S
 
 
 # [1] shake:
@@ -100,6 +120,7 @@ def _to_elements(scheme, cluster, excludes={'m': set(), 'p': set()}):
             value += sum(matrix[i][p_id] for i in part_to_machines[p_id])
             elements.append((m_id, p_id, value))
     return sorted(elements, key=lambda x: x[2])
+
 
 # a) split cluster in any number of clusters
 def _split(scheme, cluster):
@@ -401,11 +422,28 @@ def _move_machines(scheme, O, S):
 
 
 # local search
-LS_PIPELINES = [p for p in permutations([
-    _move_parts,
-    _move_machines,
-    # _move_elements
-])]
-def local_search(scheme, objective, solution):
+def permute(methods):
+    """
+    Return all permutations for given methods of length 1 throun len(methods).
+    """
+    permuted = []
+    for i in range(1, len(methods) + 1):
+        permuted += [p for p in permutations(methods, i)]
+    return permuted
+
+
+LS_PIPELINES = permute([_move_parts, _move_machines, _move_elements])
+def local_search(scheme, objective, solution, choose_best=False):
     """Perform local search"""
-    return _choose_best_sln(LS_PIPELINES, scheme, objective, solution)
+    l = 0
+    best_S = solution
+    curr_S = solution
+    if choose_best:
+        best_S = _choose_best_sln(LS_PIPELINES, scheme, objective, solution)
+    while l < 100:
+        l += 1
+        curr_S = _choose_any_sln(LS_PIPELINES, scheme, objective, curr_S)
+        if objective(scheme, curr_S) > objective(scheme, best_S):
+            l = 0
+            best_S = curr_S
+    return best_S

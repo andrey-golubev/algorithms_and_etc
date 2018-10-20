@@ -7,6 +7,8 @@ import argparse
 import time
 import os
 import sys
+from copy import deepcopy
+
 
 # local imports
 from contextlib import contextmanager
@@ -42,7 +44,7 @@ def parse_args():
         type=int,
         default=60*60)
     parser.add_argument('--max-iter',
-        help='Iterated Local Search max iterations',
+        help='Algorithm max iterations',
         type=int,
         default=2000)
     return parser.parse_args()
@@ -89,13 +91,10 @@ def variable_neighbourhood_search(scheme, time_limit, max_iter):
             best_O = curr_O
     except TimeoutError:
         pass  # supress timeout errors, expecting only from algo timeout
-    # except Exception:
-    #     raise
     finally:
         if best_S is None:
             return None
-        return search.local_search(scheme, O, best_S)
-    # return search.local_search(scheme, O, best_S)
+        return search.local_search(scheme, O, best_S, choose_best=True)
 
 
 def main():
