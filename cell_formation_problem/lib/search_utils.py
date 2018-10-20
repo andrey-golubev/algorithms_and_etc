@@ -442,7 +442,7 @@ def local_search(scheme, objective, solution, choose_best=False):
         best_S = _choose_best_sln(LS_PIPELINES, scheme, objective, solution)
     while l < 100:
         l += 1
-        curr_S = _choose_any_sln(LS_PIPELINES, scheme, objective, curr_S)
+        curr_S = _choose_any_sln(LS_PIPELINES, scheme, objective, curr_S, single_thread=True)
         if objective(scheme, curr_S) > objective(scheme, best_S):
             l = 0
             best_S = curr_S
