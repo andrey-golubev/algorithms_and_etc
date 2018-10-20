@@ -6,6 +6,7 @@ import multiprocessing
 from copy import deepcopy
 from collections import namedtuple
 from itertools import permutations
+import random
 
 
 # local imports
@@ -174,8 +175,14 @@ def _split_clusters(scheme, O, S):
     clusters = construct_clusters(scheme, S)
     new_clusters = []
     for cluster in clusters:
+        p = random.randint(0, 1)
         if not cluster.can_split:
-            # copy "as is"
+            # copy "as is" if can't split the cluster
+            new_clusters.append(cluster)
+            continue
+        if len(clusters) > 1 and p:
+            # randomly decide if want to split curr cluster
+            # always expect split if len(clusters) == 1
             new_clusters.append(cluster)
             continue
         new_clusters += _split(scheme, cluster)
@@ -442,7 +449,7 @@ def local_search(scheme, objective, solution, choose_best=False):
         best_S = _choose_best_sln(LS_PIPELINES, scheme, objective, solution)
     while l < 100:
         l += 1
-        curr_S = _choose_any_sln(LS_PIPELINES, scheme, objective, curr_S, single_thread=True)
+        curr_S = _choose_best_sln(LS_PIPELINES, scheme, objective, curr_S)
         if objective(scheme, curr_S) > objective(scheme, best_S):
             l = 0
             best_S = curr_S

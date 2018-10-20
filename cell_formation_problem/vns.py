@@ -76,12 +76,12 @@ def variable_neighbourhood_search(scheme, time_limit, max_iter):
             S = search.local_search(scheme, O, S)
             if i % max_iter / 10 == 0:
                 print("O* so far:", best_O)
-            if S == best_S:
-                # solution didn't change after perturbation + local search
-                break
-            if objective_unchanged > max_iter * 0.1:
-                # if 10% of iterations in a row there's no improvement, stop
-                break
+            # if S == best_S:
+            #     # solution didn't change after perturbation + local search
+            #     break
+            # if objective_unchanged > max_iter * 0.1:
+            #     # if 10% of iterations in a row there's no improvement, stop
+            #     break
             curr_O = O(scheme, S)
             if curr_O <= best_O:
                 objective_unchanged += 1
