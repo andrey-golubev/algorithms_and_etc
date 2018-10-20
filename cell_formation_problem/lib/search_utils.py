@@ -239,7 +239,7 @@ def _merge(scheme, O, S):
     return S
 
 
-SHAKE_PIPELINES = [[_split_clusters], [_merge]]
+SHAKE_PIPELINES = permute([_split_clusters, _merge])
 def shake(scheme, objective, solution):
     """Perform shaking procedure"""
     return _choose_best_sln(SHAKE_PIPELINES, scheme, objective, solution)

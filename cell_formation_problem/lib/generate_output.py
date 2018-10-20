@@ -4,7 +4,7 @@ import os
 def generate_sol(name, solution, cwd):
     """Generate <instance name>.sol"""
     filename = '{name}.sol'.format(name=name)
-    filepath = os.path.join(os.path.abspath(cwd), '_cfp_logs_vns_general_no_random')
+    filepath = os.path.join(os.path.abspath(cwd), '_cfp_logs_vns_permuted_shake')
     try:
         os.makedirs(filepath)
     except:
