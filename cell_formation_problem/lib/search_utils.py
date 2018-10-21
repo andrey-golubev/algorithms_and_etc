@@ -215,25 +215,29 @@ def _split_clusters_no_random(scheme, O, S):
 
 
 #  b) merge bad clusters into 1
-def _merge_clusters(scheme, O, S):
+def _merge_clusters(scheme, O, S, add_random=True):
     """Merge bad clusters into 1"""
     clusters = construct_clusters(scheme, S)
     new_clusters = []
     while clusters:
+        p = random.randint(0, 1)
         updated_cluster = clusters.pop(0)
-        cluster_length = len(clusters)
-        for _ in range(cluster_length):
-            if not clusters:
-                break
-            next_cluster = clusters.pop(0)
-            merged = deepcopy(updated_cluster)
-            merged.merge(next_cluster)
-            # if merged cluster is worse than split clusters, do not merge
-            # else, merge
-            if merged.value <= updated_cluster.value + next_cluster.value:
-                clusters.append(next_cluster)
-            else:
-                updated_cluster = merged
+        if not add_random or p:
+            # randomly decide if want to merge curr cluster
+            # always expect split if len(clusters) == 1
+            cluster_length = len(clusters)
+            for _ in range(cluster_length):
+                if not clusters:
+                    break
+                next_cluster = clusters.pop(0)
+                merged = deepcopy(updated_cluster)
+                merged.merge(next_cluster)
+                # if merged cluster is worse than split clusters, do not merge
+                # else, merge
+                if merged.value <= updated_cluster.value + next_cluster.value:
+                    clusters.append(next_cluster)
+                else:
+                    updated_cluster = merged
         new_clusters.append(updated_cluster)
     # fix ids
     for i in range(len(new_clusters)):
@@ -246,14 +250,24 @@ def _merge_clusters(scheme, O, S):
     return S
 
 
+def _merge_clusters_no_random(scheme, O, S):
+    """
+    Wrapper for _split_clusters to find best solution greedily
+    """
+    return _merge_clusters(scheme, O, S, add_random=False)
+
+
 SHAKE_PIPELINES = permute([_split_clusters, _merge_clusters])
-SHAKE_PIPELINES_NO_RANDOM = permute([_split_clusters_no_random, _merge_clusters])
+SHAKE_PIPELINES_NO_RANDOM = permute(
+    [_split_clusters_no_random, _merge_clusters_no_random])
 def shake(scheme, objective, solution, add_random=True):
     """Perform shaking procedure"""
     if add_random:
-        return _choose_best_sln(SHAKE_PIPELINES, scheme, objective, solution)
+        return _choose_best_sln(
+            SHAKE_PIPELINES, scheme, objective, solution)
     else:
-        return _choose_best_sln(SHAKE_PIPELINES_NO_RANDOM, scheme, objective, solution)
+        return _choose_best_sln(
+            SHAKE_PIPELINES_NO_RANDOM, scheme, objective, solution)
 
 
 # [2] local search:
