@@ -445,9 +445,7 @@ def local_search(scheme, objective, solution, choose_best=False):
     l = 0
     best_S = solution
     curr_S = solution
-    #if choose_best:
-    #    best_S = _choose_best_sln(LS_PIPELINES, scheme, objective, solution)
-    while l < 100:
+    while l < 2:
         l += 1
         curr_S = _choose_best_sln(LS_PIPELINES, scheme, objective, curr_S)
         if objective(scheme, curr_S) > objective(scheme, best_S):
