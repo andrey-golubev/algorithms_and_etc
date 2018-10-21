@@ -6,6 +6,7 @@ import multiprocessing
 from copy import deepcopy
 from collections import namedtuple
 from itertools import permutations
+import random
 
 
 # local imports
@@ -53,21 +54,51 @@ def _choose_best_sln(pipelines, scheme, objective, solution, single_thread=False
     Note: if single_thread is True, the execution in not parallel but a
     single-threaded for-loop is used instead
     """
-    single_thread = False
     results = []
     if single_thread:
         for pipeline in pipelines:
-            value, S = _execute(pipeline, scheme, objective, solution)
+            value, S = _execute(pipeline, scheme, objective, deepcopy(solution))
             results.append((value, S))
     else:
         with futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
-            futures_per_pipeline = {executor.submit(_execute, p, scheme, objective, solution) for p in pipelines}
+            futures_per_pipeline = {executor.submit(_execute, p, scheme, objective, deepcopy(solution)) for p in pipelines}
             for future in futures_per_pipeline:
                 results.append(future.result())
     if not results:
         raise RuntimeError('no pipelines executed')
     # return solution that gives best objective
     return sorted(results, key=lambda x: x[0], reverse=True)[0][1]
+
+
+def _choose_any_sln(pipelines, scheme, objective, solution, single_thread=False):
+    """
+    Execute sequential pipelines in parallel and choose any better solution
+    """
+    best_S = solution
+    best_O = objective(scheme, solution)
+    if single_thread:
+        for pipeline in pipelines:
+            value, S = _execute(pipeline, scheme, objective, deepcopy(solution))
+            if value > best_O:
+                return S
+    else:
+        with futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
+            futures_per_pipeline = {executor.submit(_execute, p, scheme, objective, deepcopy(solution)) for p in pipelines}
+            for future in futures_per_pipeline:
+                value, S = future.result()
+                if value > best_O:
+                    return S
+    return best_S
+
+
+def permute(methods):
+    """
+    Return all permutations for given methods of length 1 throun len(methods).
+    """
+    permuted = []
+    for i in range(1, len(methods) + 1):
+        permuted += [p for p in permutations(methods, i)]
+    return permuted
 
 
 # [1] shake:
@@ -100,6 +131,7 @@ def _to_elements(scheme, cluster, excludes={'m': set(), 'p': set()}):
             value += sum(matrix[i][p_id] for i in part_to_machines[p_id])
             elements.append((m_id, p_id, value))
     return sorted(elements, key=lambda x: x[2])
+
 
 # a) split cluster in any number of clusters
 def _split(scheme, cluster):
@@ -148,13 +180,19 @@ def _split(scheme, cluster):
     return cleaned_clusters
 
 
-def _split_clusters(scheme, O, S):
+def _split_clusters(scheme, O, S, add_random=True):
     """Split bad clusters in solution"""
     clusters = construct_clusters(scheme, S)
     new_clusters = []
     for cluster in clusters:
+        p = random.randint(0, 1)
         if not cluster.can_split:
-            # copy "as is"
+            # copy "as is" if can't split the cluster
+            new_clusters.append(cluster)
+            continue
+        if add_random and len(clusters) > 1 and p:
+            # randomly decide if want to split curr cluster
+            # always expect split if len(clusters) == 1
             new_clusters.append(cluster)
             continue
         new_clusters += _split(scheme, cluster)
@@ -169,26 +207,37 @@ def _split_clusters(scheme, O, S):
     return S
 
 
+def _split_clusters_no_random(scheme, O, S):
+    """
+    Wrapper for _split_clusters to find best solution greedily
+    """
+    return _split_clusters(scheme, O, S, add_random=False)
+
+
 #  b) merge bad clusters into 1
-def _merge(scheme, O, S):
+def _merge_clusters(scheme, O, S, add_random=True):
     """Merge bad clusters into 1"""
     clusters = construct_clusters(scheme, S)
     new_clusters = []
     while clusters:
+        p = random.randint(0, 1)
         updated_cluster = clusters.pop(0)
-        cluster_length = len(clusters)
-        for _ in range(cluster_length):
-            if not clusters:
-                break
-            next_cluster = clusters.pop(0)
-            merged = deepcopy(updated_cluster)
-            merged.merge(next_cluster)
-            # if merged cluster is worse than split clusters, do not merge
-            # else, merge
-            if merged.value <= updated_cluster.value + next_cluster.value:
-                clusters.append(next_cluster)
-            else:
-                updated_cluster = merged
+        if not add_random or p:
+            # randomly decide if want to merge curr cluster
+            # always expect split if len(clusters) == 1
+            cluster_length = len(clusters)
+            for _ in range(cluster_length):
+                if not clusters:
+                    break
+                next_cluster = clusters.pop(0)
+                merged = deepcopy(updated_cluster)
+                merged.merge(next_cluster)
+                # if merged cluster is worse than split clusters, do not merge
+                # else, merge
+                if merged.value <= updated_cluster.value + next_cluster.value:
+                    clusters.append(next_cluster)
+                else:
+                    updated_cluster = merged
         new_clusters.append(updated_cluster)
     # fix ids
     for i in range(len(new_clusters)):
@@ -201,10 +250,24 @@ def _merge(scheme, O, S):
     return S
 
 
-SHAKE_PIPELINES = [[_split_clusters], [_merge]]
-def shake(scheme, objective, solution):
+def _merge_clusters_no_random(scheme, O, S):
+    """
+    Wrapper for _split_clusters to find best solution greedily
+    """
+    return _merge_clusters(scheme, O, S, add_random=False)
+
+
+SHAKE_PIPELINES = permute([_split_clusters, _merge_clusters])
+SHAKE_PIPELINES_NO_RANDOM = permute(
+    [_split_clusters_no_random, _merge_clusters_no_random])
+def shake(scheme, objective, solution, add_random=True):
     """Perform shaking procedure"""
-    return _choose_best_sln(SHAKE_PIPELINES, scheme, objective, solution)
+    if add_random:
+        return _choose_best_sln(
+            SHAKE_PIPELINES, scheme, objective, solution)
+    else:
+        return _choose_best_sln(
+            SHAKE_PIPELINES_NO_RANDOM, scheme, objective, solution)
 
 
 # [2] local search:
@@ -401,11 +464,16 @@ def _move_machines(scheme, O, S):
 
 
 # local search
-LS_PIPELINES = [p for p in permutations([
-    _move_parts,
-    _move_machines,
-    # _move_elements
-])]
+LS_PIPELINES = permute([_move_parts, _move_machines, _move_elements])
 def local_search(scheme, objective, solution):
     """Perform local search"""
-    return _choose_best_sln(LS_PIPELINES, scheme, objective, solution)
+    l = 0
+    best_S = solution
+    curr_S = solution
+    while l < 2:
+        l += 1
+        curr_S = _choose_best_sln(LS_PIPELINES, scheme, objective, curr_S)
+        if objective(scheme, curr_S) > objective(scheme, best_S):
+            l = 0
+            best_S = curr_S
+    return best_S

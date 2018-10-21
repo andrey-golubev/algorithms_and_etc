@@ -7,6 +7,8 @@ import argparse
 import time
 import os
 import sys
+from copy import deepcopy
+
 
 # local imports
 from contextlib import contextmanager
@@ -42,7 +44,7 @@ def parse_args():
         type=int,
         default=60*60)
     parser.add_argument('--max-iter',
-        help='Iterated Local Search max iterations',
+        help='Algorithm max iterations',
         type=int,
         default=2000)
     return parser.parse_args()
@@ -74,12 +76,12 @@ def variable_neighbourhood_search(scheme, time_limit, max_iter):
             S = search.local_search(scheme, O, S)
             if i % max_iter / 10 == 0:
                 print("O* so far:", best_O)
-            if S == best_S:
-                # solution didn't change after perturbation + local search
-                break
-            if objective_unchanged > max_iter * 0.1:
-                # if 10% of iterations in a row there's no improvement, stop
-                break
+            # if S == best_S:
+            #     # solution didn't change after perturbation + local search
+            #     break
+            # if objective_unchanged > max_iter * 0.1:
+            #     # if 10% of iterations in a row there's no improvement, stop
+            #     break
             curr_O = O(scheme, S)
             if curr_O <= best_O:
                 objective_unchanged += 1
@@ -89,13 +91,15 @@ def variable_neighbourhood_search(scheme, time_limit, max_iter):
             best_O = curr_O
     except TimeoutError:
         pass  # supress timeout errors, expecting only from algo timeout
-    # except Exception:
-    #     raise
     finally:
         if best_S is None:
             return None
+        # last greedy search
+        S = search.shake(scheme, O, best_S, add_random=False)
+        S = search.local_search(scheme, O, S)
+        if O(scheme, S) > O(scheme, best_S):
+            best_S = S
         return search.local_search(scheme, O, best_S)
-    # return search.local_search(scheme, O, best_S)
 
 
 def main():
