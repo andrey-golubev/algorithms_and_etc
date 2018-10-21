@@ -190,11 +190,11 @@ def _split_clusters(scheme, O, S):
             # copy "as is" if can't split the cluster
             new_clusters.append(cluster)
             continue
-        # if len(clusters) > 1 and p:
-        #     # randomly decide if want to split curr cluster
-        #     # always expect split if len(clusters) == 1
-        #     new_clusters.append(cluster)
-        #     continue
+        if len(clusters) > 1 and p:
+            # randomly decide if want to split curr cluster
+            # always expect split if len(clusters) == 1
+            new_clusters.append(cluster)
+            continue
         new_clusters += _split(scheme, cluster)
     # fix ids:
     for i in range(len(new_clusters)):
