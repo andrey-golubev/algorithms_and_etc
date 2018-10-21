@@ -180,7 +180,7 @@ def _split(scheme, cluster):
     return cleaned_clusters
 
 
-def _split_clusters(scheme, O, S):
+def _split_clusters(scheme, O, S, add_random=True):
     """Split bad clusters in solution"""
     clusters = construct_clusters(scheme, S)
     new_clusters = []
@@ -190,7 +190,7 @@ def _split_clusters(scheme, O, S):
             # copy "as is" if can't split the cluster
             new_clusters.append(cluster)
             continue
-        if len(clusters) > 1 and p:
+        if add_random and len(clusters) > 1 and p:
             # randomly decide if want to split curr cluster
             # always expect split if len(clusters) == 1
             new_clusters.append(cluster)
@@ -207,8 +207,15 @@ def _split_clusters(scheme, O, S):
     return S
 
 
+def _split_clusters_no_random(scheme, O, S):
+    """
+    Wrapper for _split_clusters to find best solution greedily
+    """
+    return _split_clusters(scheme, O, S, add_random=False)
+
+
 #  b) merge bad clusters into 1
-def _merge(scheme, O, S):
+def _merge_clusters(scheme, O, S):
     """Merge bad clusters into 1"""
     clusters = construct_clusters(scheme, S)
     new_clusters = []
@@ -239,10 +246,14 @@ def _merge(scheme, O, S):
     return S
 
 
-SHAKE_PIPELINES = permute([_split_clusters, _merge])
-def shake(scheme, objective, solution):
+SHAKE_PIPELINES = permute([_split_clusters, _merge_clusters])
+SHAKE_PIPELINES_NO_RANDOM = permute([_split_clusters_no_random, _merge_clusters])
+def shake(scheme, objective, solution, add_random=True):
     """Perform shaking procedure"""
-    return _choose_best_sln(SHAKE_PIPELINES, scheme, objective, solution)
+    if add_random:
+        return _choose_best_sln(SHAKE_PIPELINES, scheme, objective, solution)
+    else:
+        return _choose_best_sln(SHAKE_PIPELINES_NO_RANDOM, scheme, objective, solution)
 
 
 # [2] local search:
@@ -440,7 +451,7 @@ def _move_machines(scheme, O, S):
 
 # local search
 LS_PIPELINES = permute([_move_parts, _move_machines, _move_elements])
-def local_search(scheme, objective, solution, choose_best=False):
+def local_search(scheme, objective, solution):
     """Perform local search"""
     l = 0
     best_S = solution

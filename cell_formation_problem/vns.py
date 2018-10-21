@@ -94,7 +94,12 @@ def variable_neighbourhood_search(scheme, time_limit, max_iter):
     finally:
         if best_S is None:
             return None
-        return search.local_search(scheme, O, best_S, choose_best=True)
+        # last greedy search
+        S = search.shake(scheme, O, best_S, add_random=False)
+        S = search.local_search(scheme, O, S)
+        if O(scheme, S) > O(scheme, best_S):
+            best_S = S
+        return search.local_search(scheme, O, best_S)
 
 
 def main():
