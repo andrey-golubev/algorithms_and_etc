@@ -25,14 +25,14 @@ def import_from(rel_path):
 with import_from('.'):
     import lib.search_utils as search
     from lib.problem_utils import Problem
-    from lib.problem_utils import QfpObjective
+    from lib.problem_utils import QapObjective
     from lib.generate_output import generate_sol
     from lib.constraints import satisfies_constraints
 
 
 def parse_args():
     """Parse command-line arguments"""
-    parser = argparse.ArgumentParser("VNS problem parser")
+    parser = argparse.ArgumentParser("QAP problem parser")
     parser.add_argument('instances',
         nargs='+',
         help='VNS problem instance(s)')
@@ -46,7 +46,11 @@ def parse_args():
     parser.add_argument('--max-iter',
         help='Algorithm max iterations',
         type=int,
-        default=2000)
+        default=500)
+    parser.add_argument('--population',
+        help='Maintained population size',
+        type=int,
+        default=30)
     return parser.parse_args()
 
 
@@ -56,11 +60,30 @@ def genetic_algorithm(problem, time_limit, max_iter):
     # S - current solution
     # best_S <=> S*
     # MD - method specific supplementary data
+    search.set_seed(777)
     best_S = None
-    S = search.create_initial_solution(problem)
-    if not satisfies_constraints(problem, S):
-        raise ValueError('initial solution is infeasible')
-    best_S = S
+    O = QapObjective()
+    P = search.create_initial_population(problem)
+    for p in P:
+        if not satisfies_constraints(problem, p):
+            raise ValueError('initial solution is infeasible')
+    best_S = sorted([p for p in P], key=lambda x: O(problem, x))[0]
+    best_O = O(problem, best_S)
+
+    for i in range(max_iter):
+        if i % 100 == 0:
+            print('So far O* = {o}'.format(o=best_O))
+        parents = deepcopy(P)
+        P = search.select(problem, O, P)
+        P = search.reproduce(problem, P)
+        P = search.mutate(problem, P)
+        P = search.replace(problem, parents, P)
+        curr_best_S = sorted([p for p in P], key=lambda x: O(problem, x))[0]
+        curr_best_O = O(problem, curr_best_S)
+        if curr_best_O >= best_O:
+            continue
+        best_S = curr_best_S
+        best_O = curr_best_O
     return best_S
 
 
@@ -72,6 +95,7 @@ def main():
         name = os.path.splitext(os.path.basename(instance))[0]
         with open(instance, 'r') as instance_file:
             problem = Problem(instance_file)
+            problem.population_size = args.population
         print('-'*100)
         print('File: {name}.txt'.format(name=name))
         start = time.time()
@@ -81,7 +105,7 @@ def main():
         if S is None:
             print('! NO SOLUTION FOUND !')
         else:
-            print('O* = {o}'.format(o=QfpObjective()(problem, S)))
+            print('O* = {o}'.format(o=QapObjective()(problem, S)))
             print('All satisfied?', satisfies_constraints(problem, S))
             print('----- PERFORMANCE -----')
             print('GA took {some} seconds'.format(some=elapsed))

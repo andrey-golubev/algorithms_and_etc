@@ -34,6 +34,7 @@ class Problem(object):
     def __init__(self, io_stream):
         self._n, self._distances, self._flows = Problem.parse_instance(
             io_stream)
+        self.population_size = 0  # maintained population size
 
     @property
     def distances(self):
@@ -52,7 +53,7 @@ class Problem(object):
 
     @staticmethod
     def parse_instance(io_stream):
-        """Parse CFP instance file"""
+        """Parse QAP instance file"""
         n = int(io_stream.readline().strip())
         # read distances matrix:
         distances = []
@@ -72,7 +73,7 @@ class Problem(object):
         return n, distances, flows
 
 
-class QfpObjective():
+class QapObjective():
     """Quadratic assignment problem objective function"""
     def __call__(self, problem, solution):
         """
