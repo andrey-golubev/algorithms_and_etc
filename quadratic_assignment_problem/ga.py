@@ -46,7 +46,7 @@ def parse_args():
     parser.add_argument('--max-iter',
         help='Algorithm max iterations',
         type=int,
-        default=500)
+        default=1000)
     parser.add_argument('--population',
         help='Maintained population size',
         type=int,
@@ -60,7 +60,7 @@ def genetic_algorithm(problem, time_limit, max_iter):
     # S - current solution
     # best_S <=> S*
     # MD - method specific supplementary data
-    search.set_seed(777)
+    search.set_seed(11)
     best_S = None
     O = QapObjective()
     P = search.create_initial_population(problem)

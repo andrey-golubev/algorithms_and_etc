@@ -41,12 +41,6 @@ def create_initial_population(problem):
     return population
 
 
-# evaluation
-def evaluate(problem, objective, population):
-    """Evaluate population"""
-    return population
-
-
 # selection
 def select(problem, objective, population):
     """Select best individuals in population"""
@@ -113,9 +107,10 @@ def replace(problem, parents, children):
     Can potentially result in delete-all strategy if N becomes equal to a number
     of maintained population
     """
-    n = np.random.randint(len(parents) / 3, len(parents))
-    indices = np.random.choice([i for i in range(len(parents))], size=n,
-        replace=False)
-    for i in indices:
-        parents[i] = children[i]
-    return parents
+    # n = np.random.randint(len(parents) / 3, len(parents))
+    # indices = np.random.choice([i for i in range(len(parents))], size=n,
+    #     replace=False)
+    # for i in indices:
+    #     parents[i] = children[i]
+    # return parents
+    return children
