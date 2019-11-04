@@ -2,7 +2,7 @@
 
 Current state contains:
 * LP (linear programming) approaches to solve max. clique problem
-* Metaheuristics to solve vehicle routing problems
+* Metaheuristics to solve vehicle routing, quadratic assignment, cell formation problems
 
 ## Dependencies
 
