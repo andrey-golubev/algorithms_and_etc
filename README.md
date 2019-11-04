@@ -1,6 +1,6 @@
 # Algorithmic sandbox dedicated to solving hard problems
 
-Current state contains:
+Currently contains:
 * LP (linear programming) approaches to solve max. clique problem
 * Metaheuristics to solve vehicle routing, quadratic assignment, cell formation problems
 
